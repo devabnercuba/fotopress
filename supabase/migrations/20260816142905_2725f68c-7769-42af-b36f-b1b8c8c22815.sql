@@ -1,0 +1,2 @@
+UPDATE public.billing_settings SET price_cents = 9700, product_name = 'PressBrief — Acesso Fundador', offer_name = 'Pagamento único', updated_at = now() WHERE provider = 'kiwify';
+UPDATE public.plans SET price_cents = 9700, updated_at = now() WHERE code = 'founder';

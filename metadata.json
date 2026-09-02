@@ -1,0 +1,6 @@
+{
+  "name": "Cobertura Esportiva",
+  "description": "Calendário de jogos e agenda pessoal de coberturas esportivas",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

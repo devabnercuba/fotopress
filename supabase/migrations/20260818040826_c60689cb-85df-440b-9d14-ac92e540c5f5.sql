@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.enforce_single_featured_tutorial() FROM PUBLIC, anon, authenticated;

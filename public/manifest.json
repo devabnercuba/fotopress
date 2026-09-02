@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "FotoPress - Agenda Esportiva",
+  "short_name": "FotoPress",
+  "description": "Calendário de jogos, coberturas esportivas e notícias para fotógrafos e jornalistas.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#0f172a",
+  "background_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
