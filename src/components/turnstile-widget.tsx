@@ -5,7 +5,11 @@ import { useEffect, useRef } from "react";
  * A Site Key é pública e vem de VITE_TURNSTILE_SITE_KEY. A Secret Key fica
  * apenas na configuração de autenticação do backend.
  */
-export const TURNSTILE_SITE_KEY = import.meta.env["VITE_TURNSTILE_SITE_KEY"] as string | undefined;
+const isDevelopment = import.meta.env["VITE_FOTOPRESS_DEPLOYMENT"] === "development";
+
+export const TURNSTILE_SITE_KEY = isDevelopment
+  ? undefined
+  : (import.meta.env["VITE_TURNSTILE_SITE_KEY"] as string | undefined);
 
 const SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 

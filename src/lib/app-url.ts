@@ -11,7 +11,7 @@
  * Navegação interna continua usando rotas relativas (`/dashboard`), nunca
  * URL absoluta.
  */
-const FALLBACK_APP_URL = "https://pressbrief.lovable.app";
+const FALLBACK_APP_URL = "http://localhost:3000";
 
 const strip = (value: string) => value.trim().replace(/\/+$/, "");
 

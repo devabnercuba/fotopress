@@ -43,7 +43,6 @@ export type RadarContext = {
   news?: RadarNews[];
 };
 
-
 export interface RadarProvider {
   id: string;
   generate(context: RadarContext): Promise<RadarContent>;
@@ -103,14 +102,16 @@ export async function collectIntegratedNewsForMatch(match: Match) {
   if (error) return [];
 
   const clubs = [match.home_team, match.away_team].filter(Boolean) as string[];
-  return ((data ?? []) as unknown as Array<{
-    id: string;
-    title: string;
-    summary: string | null;
-    url: string;
-    published_at: string | null;
-    source: { name: string; type: string; status: string } | null;
-  }>)
+  return (
+    (data ?? []) as unknown as Array<{
+      id: string;
+      title: string;
+      summary: string | null;
+      url: string;
+      published_at: string | null;
+      source: { name: string; type: string; status: string } | null;
+    }>
+  )
     .filter((n) => n.source?.type === OGOL_SOURCE_TYPE && n.source.status === "active")
     .filter((n) => clubs.some((club) => mentionsClub(`${n.title} ${n.summary ?? ""}`, club)))
     .slice(0, 8)
@@ -154,7 +155,6 @@ export function buildPrompt(
   ];
   return lines.join("\n");
 }
-
 
 /** Provedor padrão: rascunho local, sem IA. Substituível por um modelo real. */
 const draftProvider: RadarProvider = {
@@ -214,7 +214,6 @@ export async function syncRadar(match: Match, coverageId?: string) {
   );
   const prompt = buildPrompt(match, sources, news);
   const content = await provider.generate({ match, sources, prompt, news });
-
 
   const row = {
     match_id: match.id,

@@ -24,7 +24,11 @@ function toIsoDate(text: string): string {
 }
 
 function clean(value: string) {
-  return value.replace(/\s+/g, " ").trim().replace(/^[-–|,;]+|[-–|,;]+$/g, "").trim();
+  return value
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[-–|,;]+|[-–|,;]+$/g, "")
+    .trim();
 }
 
 export function parseMatchesFromText(
@@ -46,9 +50,7 @@ export function parseMatchesFromText(
 
     // remove data e hora da linha para sobrar os nomes
     const timeMatch = line.match(TIME_RE);
-    const time = timeMatch
-      ? `${timeMatch[1].padStart(2, "0")}:${timeMatch[2]}`
-      : "19:00";
+    const time = timeMatch ? `${timeMatch[1].padStart(2, "0")}:${timeMatch[2]}` : "19:00";
 
     const rest = clean(line.replace(DATE_RE, " ").replace(TIME_RE, " "));
     const cells = rest.includes("|") ? rest.split("|").map(clean).filter(Boolean) : [rest];

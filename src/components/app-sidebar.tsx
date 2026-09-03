@@ -37,6 +37,7 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { APP_VERSION } from "@/lib/release-notes-data";
+import { cn } from "@/lib/utils";
 
 type NavItem = { to: string; label: string; icon: typeof Home };
 

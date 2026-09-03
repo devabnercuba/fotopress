@@ -21,10 +21,6 @@ returns boolean language sql stable security definer set search_path = public as
   select exists (select 1 from public.user_roles where user_id = _user_id and role = _role)
 $$;
 
-insert into public.user_roles (user_id, role)
-values ('e6fce9c0-651c-4635-862a-a0b044a66031','admin')
-on conflict do nothing;
-
 -- ============ ownership columns ============
 alter table public.matches add column if not exists user_id uuid default auth.uid();
 alter table public.match_radar add column if not exists user_id uuid default auth.uid();

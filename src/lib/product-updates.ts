@@ -276,10 +276,12 @@ export function useToggleUpdateReadStatus() {
 
         if (userId) {
           try {
-            await supabase.from("product_update_reads").upsert(
-              [{ user_id: userId, update_id: id }],
-              { onConflict: "user_id,update_id", ignoreDuplicates: true },
-            );
+            await supabase
+              .from("product_update_reads")
+              .upsert([{ user_id: userId, update_id: id }], {
+                onConflict: "user_id,update_id",
+                ignoreDuplicates: true,
+              });
           } catch (e) {
             console.warn("Erro ao registrar leitura:", e);
           }

@@ -130,7 +130,7 @@ function ContentSourcesPage() {
         setRunning(null);
         if (result.ok) {
           toast.success(result.message, {
-            description: `Encontradas ${result.found} · novas ${result.inserted} · repetidas ${result.duplicated} · classificadas por IA ${result.classified}`,
+            description: `Encontradas ${result.found} · novas ${result.inserted} · repetidas ${result.duplicated}`,
           });
         } else {
           toast.error(result.message);

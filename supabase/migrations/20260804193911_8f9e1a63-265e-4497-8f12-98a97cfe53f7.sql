@@ -52,4 +52,3 @@ GRANT ALL ON public.app_settings TO service_role;
 ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "public access app_settings" ON public.app_settings FOR ALL USING (true) WITH CHECK (true);
 CREATE TRIGGER update_app_settings_updated_at BEFORE UPDATE ON public.app_settings FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-INSERT INTO public.app_settings DEFAULT VALUES;

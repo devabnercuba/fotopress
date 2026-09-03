@@ -2,12 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 import { sanitizeBody, sanitizeSummary, sanitizeTitle } from "./external-content";
-import {
-  collectNews,
-  enrichNewsItem,
-  type CollectNewsResult,
-  type EnrichedNewsItem,
-} from "./news.functions";
+import { collectNews, type CollectNewsResult } from "./news.functions";
 
 /** Tipos de item vindos dos feeds (oGol) e de coleta manual (sempre "news"). */
 export type NewsFeedType = "news" | "transfer" | "result" | "upcoming_match";
@@ -97,12 +92,12 @@ export function newsTitle(item: Pick<NewsItem, "title">) {
   return sanitizeTitle(item.title) || "Sem título";
 }
 
-/** Resumo curto para cards: prioriza o Resumo FotoPress quando existir. */
+/** Resumo curto para cards: utiliza o resumo disponível da matéria. */
 export function newsSummary(item: Pick<NewsItem, "article_summary" | "summary">) {
   return sanitizeSummary(item.article_summary ?? item.summary);
 }
 
-/** Texto longo (Resumo FotoPress ou resumo da fonte) preservando parágrafos. */
+/** Texto longo (resumo da matéria ou da fonte) preservando parágrafos. */
 export function newsBody(value: string | null | undefined) {
   return sanitizeBody(value);
 }
@@ -136,19 +131,6 @@ export function useCollectNews() {
     mutationFn: async (sourceId: string): Promise<CollectNewsResult> =>
       collectNews({ data: { sourceId } }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["news_items"] });
-    },
-  });
-}
-
-export function useEnrichNewsItem() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string): Promise<EnrichedNewsItem> => enrichNewsItem({ data: { id } }),
-    onSuccess: (result) => {
-      qc.setQueryData<NewsItem[] | undefined>(["news_items", 200], (prev) =>
-        prev?.map((item) => (item.id === result.id ? { ...item, ...result } : item)),
-      );
       qc.invalidateQueries({ queryKey: ["news_items"] });
     },
   });

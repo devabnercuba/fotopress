@@ -7,7 +7,8 @@
  * estrutura para que as fontes possam ser plugadas sem refatoração.
  */
 
-export type MatchSourceId = "cbf-api" | "fcf-api" | "futsal-api" | "pdf" | "excel" | "csv" | "manual";
+export type MatchSourceId =
+  "cbf-api" | "fcf-api" | "futsal-api" | "pdf" | "excel" | "csv" | "manual";
 
 export type RawMatch = {
   competitionName: string;

@@ -49,7 +49,6 @@ export type NormalizedMatch = {
 /** Falha de uma partida específica durante a leitura/gravação. */
 export type ImportIssue = { match: string; reason: string };
 
-
 /** Alias público do contrato (mesma forma, nome pedido na especificação). */
 export type ImportedMatch = NormalizedMatch;
 
@@ -82,6 +81,5 @@ export interface Importer {
   collect?(input: ParseInput): Promise<CollectResult>;
   parse(input: ParseInput): Promise<NormalizedMatch[]>;
 }
-
 
 export class ImportError extends Error {}

@@ -54,14 +54,30 @@ async function recordAuthenticatedPing(info: {
   }
 }
 
+function webhookEnabled() {
+  return (
+    process.env.FOTOPRESS_DEPLOYMENT === "production" &&
+    process.env.KIWIFY_WEBHOOK_ENABLED === "true"
+  );
+}
+
 export const Route = createFileRoute("/api/public/kiwify")({
   server: {
     handlers: {
       OPTIONS: async () => new Response(null, { status: 204, headers: CORS_HEADERS }),
 
-      GET: async () => json({ endpoint: "kiwify-webhook", status: "online", mode: "production" }),
+      GET: async () =>
+        json({
+          endpoint: "kiwify-webhook",
+          status: webhookEnabled() ? "online" : "disabled",
+          mode: process.env.FOTOPRESS_DEPLOYMENT ?? "unconfigured",
+        }),
 
       POST: async ({ request }) => {
+        if (!webhookEnabled()) {
+          return json({ error: "webhook disabled in this environment" }, 503);
+        }
+
         const url = new URL(request.url);
         const raw = await request.text();
         const contentType = request.headers.get("content-type");
