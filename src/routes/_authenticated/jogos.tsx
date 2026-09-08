@@ -55,6 +55,8 @@ import {
 } from "@/lib/coverages";
 import { useDataSources } from "@/lib/data-sources";
 import { useMatches, type Match } from "@/lib/queries";
+import { useSportPreferences } from "@/lib/sport-preferences";
+import { useSportTerminology } from "@/lib/sport-terminology";
 
 export const Route = createFileRoute("/_authenticated/jogos")({
   validateSearch: (search: Record<string, unknown>): { source?: string } => ({
@@ -85,13 +87,22 @@ const ALL = "todos";
 
 /** Página Jogos: partidas (fluxo atual) e eventos esportivos, em abas. */
 function JogosPage() {
+  const { primarySport } = useSportPreferences();
+  const terminology = useSportTerminology();
+  const isFutebol = primarySport === "futebol";
+
+  const headerTitle = isFutebol ? "Jogos" : terminology.coveragePlural;
+  const headerDescription = isFutebol
+    ? "Organize suas partidas e eventos esportivos."
+    : terminology.coveragePlural === "Eventos"
+      ? "Organize seus eventos esportivos."
+      : `Organize suas ${terminology.coveragePlural.toLowerCase()} e eventos esportivos.`;
+
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Jogos</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Organize suas partidas e eventos esportivos.
-        </p>
+        <h1 className="text-2xl font-semibold tracking-tight">{headerTitle}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{headerDescription}</p>
       </header>
 
       <Tabs defaultValue="partidas" className="space-y-6">

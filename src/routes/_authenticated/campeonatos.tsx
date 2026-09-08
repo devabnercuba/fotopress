@@ -21,6 +21,8 @@ import {
   type CredentialStatus,
 } from "@/lib/coverages";
 import { useCompetitions, useMatches, type Competition, type Match } from "@/lib/queries";
+import { useSportPreferences } from "@/lib/sport-preferences";
+import { useSportTerminology } from "@/lib/sport-terminology";
 
 export const Route = createFileRoute("/_authenticated/campeonatos")({
   head: () => ({
@@ -176,6 +178,9 @@ function CompetitionsPage() {
   const { data: competitions = [] } = useCompetitions();
   const { data: matches = [] } = useMatches();
   const { data: coverages = [] } = useCoverages();
+  const { primarySport } = useSportPreferences();
+  const terminology = useSportTerminology();
+  const isFutebol = primarySport === "futebol";
   const [selected, setSelected] = useState<Competition | null>(null);
   const [match, setMatch] = useState<Match | null>(null);
   const [query, setQuery] = useState("");
@@ -196,9 +201,13 @@ function CompetitionsPage() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Campeonatos</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {isFutebol ? "Campeonatos" : terminology.competitionPlural}
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Competições cadastradas, com estatísticas de jogos e credenciamentos.
+            {isFutebol
+              ? "Competições cadastradas, com estatísticas de jogos e credenciamentos."
+              : `${terminology.competitionPlural} com estatísticas de ${terminology.coveragePlural.toLowerCase()} e credenciamentos.`}
           </p>
         </div>
         <Button size="sm" onClick={() => setCreating(true)}>

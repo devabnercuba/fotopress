@@ -27,6 +27,8 @@ import {
   useTeams,
   type Team,
 } from "@/lib/teams";
+import { useSportPreferences } from "@/lib/sport-preferences";
+import { useSportTerminology } from "@/lib/sport-terminology";
 
 export const Route = createFileRoute("/_authenticated/clubes")({
   head: () => ({
@@ -54,6 +56,9 @@ const normalize = (v: string) => stripAccents(v).toLowerCase().trim();
 function ClubesPage() {
   const { data: teams = [], isLoading } = useTeams();
   const { merge } = useTeamMutations();
+  const { primarySport } = useSportPreferences();
+  const terminology = useSportTerminology();
+  const isFutebol = primarySport === "futebol";
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Team | null>(null);
@@ -91,10 +96,11 @@ function ClubesPage() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-xl font-semibold">Clubes</h1>
+          <h1 className="text-xl font-semibold">{isFutebol ? "Clubes" : terminology.teamPlural}</h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Cada clube é identificado por nome + modalidade + categoria + gênero. Clubes homônimos
-            de categorias diferentes são registros legítimos e não devem ser unificados.
+            {isFutebol
+              ? "Cada clube é identificado por nome + modalidade + categoria + gênero. Clubes homônimos de categorias diferentes são registros legítimos e não devem ser unificados."
+              : `Cada ${terminology.teamSingular.toLowerCase()} é identificado por nome + modalidade + categoria + gênero. Cadastros de categorias diferentes são legítimos e não devem ser unificados.`}
           </p>
         </div>
         <Button onClick={() => setCreating(true)}>

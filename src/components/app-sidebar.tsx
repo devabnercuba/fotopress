@@ -25,7 +25,7 @@ import {
   Volleyball,
   Wallet,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { QuickCreate } from "@/components/quick-create";
 import { UserMenu } from "@/components/user-menu";
@@ -33,6 +33,7 @@ import { useIsMasterAdmin } from "@/lib/admin";
 import { useUnreadUpdatesCount } from "@/lib/product-updates";
 import { openNewsUpdatesPanel } from "@/lib/updates-panel-context";
 import { useNewSuggestionsCount } from "@/lib/suggestions";
+import { useSportTerminology } from "@/lib/sport-terminology";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -40,29 +41,6 @@ import { APP_VERSION } from "@/lib/release-notes-data";
 import { cn } from "@/lib/utils";
 
 type NavItem = { to: string; label: string; icon: typeof Home };
-
-const operacao: readonly NavItem[] = [
-  { to: "/dashboard", label: "Dashboard", icon: Home },
-  { to: "/jogos", label: "Jogos/Eventos", icon: Volleyball },
-  { to: "/calendario", label: "Calendário", icon: CalendarDays },
-  { to: "/credenciamento", label: "Credenciamento", icon: ClipboardList },
-  { to: "/agenda", label: "Minha Agenda", icon: Star },
-  { to: "/concluidos", label: "Concluídos", icon: CheckCircle2 },
-];
-
-const gestao: readonly NavItem[] = [
-  { to: "/atletas", label: "Atletas/Clientes", icon: Users },
-  { to: "/clubes", label: "Clubes", icon: Shield },
-  { to: "/financeiro", label: "Financeiro", icon: Wallet },
-  { to: "/campeonatos", label: "Campeonatos", icon: Trophy },
-];
-
-const dados: readonly NavItem[] = [
-  { to: "/fontes", label: "Fontes de Jogos", icon: Download },
-  { to: "/fontes-conteudo", label: "Fontes de Notícias", icon: Newspaper },
-  { to: "/historico", label: "Histórico", icon: History },
-  { to: "/lixeira", label: "Lixeira", icon: Trash2 },
-];
 
 const ajuda: readonly NavItem[] = [
   { to: "/primeiros-passos", label: "Primeiros passos", icon: GraduationCap },
@@ -214,6 +192,42 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   const { data: isAdmin } = useIsMasterAdmin();
   const newSuggestions = useNewSuggestionsCount(!!isAdmin);
   const unreadUpdates = useUnreadUpdatesCount();
+  const terminology = useSportTerminology();
+
+  const operacaoItems = useMemo<readonly NavItem[]>(() => {
+    const jogosLabel =
+      terminology.coveragePlural === "Eventos"
+        ? "Eventos"
+        : `${terminology.coveragePlural}/Eventos`;
+    return [
+      { to: "/dashboard", label: "Dashboard", icon: Home },
+      { to: "/jogos", label: jogosLabel, icon: Volleyball },
+      { to: "/calendario", label: "Calendário", icon: CalendarDays },
+      { to: "/credenciamento", label: "Credenciamento", icon: ClipboardList },
+      { to: "/agenda", label: "Minha Agenda", icon: Star },
+      { to: "/concluidos", label: "Concluídos", icon: CheckCircle2 },
+    ];
+  }, [terminology.coveragePlural]);
+
+  const gestaoItems = useMemo<readonly NavItem[]>(() => {
+    return [
+      { to: "/atletas", label: "Atletas/Clientes", icon: Users },
+      { to: "/clubes", label: terminology.teamPlural, icon: Shield },
+      { to: "/financeiro", label: "Financeiro", icon: Wallet },
+      { to: "/campeonatos", label: terminology.competitionPlural, icon: Trophy },
+    ];
+  }, [terminology.teamPlural, terminology.competitionPlural]);
+
+  const dadosItems = useMemo<readonly NavItem[]>(() => {
+    const fontesLabel =
+      terminology.dataSourceLabel === "Fonte de jogos" ? "Fontes de Jogos" : "Fontes de Eventos";
+    return [
+      { to: "/fontes", label: fontesLabel, icon: Download },
+      { to: "/fontes-conteudo", label: "Fontes de Notícias", icon: Newspaper },
+      { to: "/historico", label: "Histórico", icon: History },
+      { to: "/lixeira", label: "Lixeira", icon: Trash2 },
+    ];
+  }, [terminology.dataSourceLabel]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -226,9 +240,9 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
 
       {/* somente esta área rola quando houver muitos itens */}
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-        <NavGroup label="Operação" items={operacao} onNavigate={onNavigate} />
-        <NavGroup label="Gestão" items={gestao} onNavigate={onNavigate} />
-        <NavGroup label="Dados e Fontes" items={dados} onNavigate={onNavigate} />
+        <NavGroup label="Operação" items={operacaoItems} onNavigate={onNavigate} />
+        <NavGroup label="Gestão" items={gestaoItems} onNavigate={onNavigate} />
+        <NavGroup label="Dados e Fontes" items={dadosItems} onNavigate={onNavigate} />
         <NavGroup
           label="Ajuda"
           items={ajuda}

@@ -66,6 +66,7 @@ import { useCompetitions } from "@/lib/queries";
 import { listCbfCompetitionsFn } from "@/lib/federation-catalog.functions";
 import { listFpfCompetitionsFn } from "@/lib/fpf-import.functions";
 import { useSportPreferences } from "@/lib/sport-preferences";
+import { useSportTerminology } from "@/lib/sport-terminology";
 import { isFcfUrl } from "@/services/importers/fcf-source";
 import { parseFpfUrl } from "@/services/importers/fpf-source";
 import {
@@ -162,6 +163,9 @@ type Form = typeof EMPTY_FORM;
 
 function DataSourcesPage() {
   const qc = useQueryClient();
+  const { primarySport } = useSportPreferences();
+  const terminology = useSportTerminology();
+  const isFutebol = primarySport === "futebol";
   const { data: sources = [], isLoading } = useDataSources();
   const { create, update, remove, clearMatches, touchSync } = useDataSourceMutations();
 
@@ -477,9 +481,17 @@ function DataSourcesPage() {
     <div className="space-y-8">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Fontes de Jogos</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {isFutebol
+              ? "Fontes de Jogos"
+              : terminology.dataSourceLabel === "Fonte de jogos"
+                ? "Fontes de Jogos"
+                : "Fontes de Eventos"}
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Centro de importação: URL (CBF/FCF), FPF, LNF e arquivos no modelo oficial FotoPress.
+            {isFutebol
+              ? "Centro de importação: URL (CBF/FCF), FPF, LNF e arquivos no modelo oficial FotoPress."
+              : `Centro de importação: ${terminology.dataSourceLabel.toLowerCase()} por URL ou pelo modelo oficial FotoPress.`}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

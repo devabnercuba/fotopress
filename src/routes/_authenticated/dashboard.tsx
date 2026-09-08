@@ -21,6 +21,8 @@ import { formatMoney, useFinancialEntries } from "@/lib/finance";
 import { newsTitle, useNewsItems, type NewsItem } from "@/lib/news";
 import { useOnboarding } from "@/lib/onboarding";
 import { firstNameOf, useAuthUser, useProfile } from "@/lib/profile";
+import { useSportPreferences } from "@/lib/sport-preferences";
+import { useSportTerminology } from "@/lib/sport-terminology";
 import { formatSportLabel } from "@/lib/sports";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -97,6 +99,9 @@ function Dashboard() {
   const { data: sources = [] } = useContentSources();
   const { data: profile } = useProfile();
   const { data: user } = useAuthUser();
+  const { primarySport } = useSportPreferences();
+  const terminology = useSportTerminology();
+  const isFutebol = primarySport === "futebol";
   const onboarding = useOnboarding();
   const [readingNews, setReadingNews] = useState<NewsItem | null>(null);
 
@@ -305,7 +310,12 @@ function Dashboard() {
               to="/jogos"
               className="inline-flex items-center rounded-md border border-input px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
             >
-              Ver jogos/eventos
+              Ver{" "}
+              {isFutebol
+                ? "jogos/eventos"
+                : terminology.coveragePlural === "Eventos"
+                  ? "eventos"
+                  : `${terminology.coveragePlural.toLowerCase()}/eventos`}
             </Link>
           </div>
         )}
@@ -316,7 +326,11 @@ function Dashboard() {
         <Stat
           label="Próximas coberturas"
           value={String(upcomingMatches.length + upcomingEvents.length)}
-          hint="Partidas e eventos aprovados"
+          hint={
+            isFutebol
+              ? "Partidas e eventos aprovados"
+              : `${terminology.coveragePlural} e eventos aprovados`
+          }
           to="/agenda"
           icon={CalendarClock}
         />
