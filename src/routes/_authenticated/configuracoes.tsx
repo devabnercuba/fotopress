@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Moon, Sun } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ import { useProfile, useProfileMutation, type Profile } from "@/lib/profile";
 import { useCompetitions } from "@/lib/queries";
 import { useSettings, useSettingsMutation, type AppSettings } from "@/lib/settings";
 import { SPORT_OPTIONS } from "@/lib/sport-preferences";
-import { ACCENTS, useTheme } from "@/lib/theme";
+import { ACCENTS, useTheme, type AccentId } from "@/lib/theme";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatWhatsapp, isValidWhatsapp, maskWhatsapp, normalizeWhatsapp } from "@/lib/whatsapp";
 
@@ -163,9 +163,20 @@ function SettingsPage() {
   const [form, setForm] = useState<AppSettings | null>(null);
   const [profileForm, setProfileForm] = useState<Profile | null>(null);
   const [whatsappInput, setWhatsappInput] = useState("");
+  const isDirtyRef = useRef(false);
+
   useEffect(() => {
-    if (settings) setForm(settings);
-  }, [settings]);
+    if (settings) {
+      // Impede que um valor antigo do cache sobrescreva o formulário se o usuário estiver editando
+      if (!form || !isDirtyRef.current) {
+        setForm(settings);
+        if (settings.accent && ACCENTS.some((a) => a.id === settings.accent)) {
+          setAccent(settings.accent as AccentId);
+        }
+      }
+    }
+  }, [settings, form, setAccent]);
+
   useEffect(() => {
     if (profile) {
       setProfileForm(profile);
@@ -177,37 +188,108 @@ function SettingsPage() {
     return <p className="text-sm text-muted-foreground">Carregando…</p>;
   }
 
-  const set = (patch: Partial<AppSettings>) => setForm((f) => (f ? { ...f, ...patch } : f));
+  const set = (patch: Partial<AppSettings>) => {
+    isDirtyRef.current = true;
+    setForm((f) => (f ? { ...f, ...patch } : f));
+  };
+
   const setProfile = (patch: Partial<Profile>) =>
     setProfileForm((p) => (p ? { ...p, ...patch } : p));
+
   const saveImage = (key: "photo_url" | "logo_url", url: string | null) => {
     setProfile({ [key]: url } as Partial<Profile>);
     if (profileForm) saveProfile.mutate({ ...profileForm, [key]: url });
   };
-  /** Modalidades só personalizam a interface — nada é excluído ao desativar. */
-  const toggleSport = (key: string) =>
-    set({
-      sports: (form?.sports ?? []).includes(key)
-        ? (form?.sports ?? []).filter((s) => s !== key)
-        : [...(form?.sports ?? []), key],
-    });
-  const toggle = (key: "favorite_competitions" | "favorite_states", id: string) =>
-    set({
-      [key]: form[key].includes(id) ? form[key].filter((v) => v !== id) : [...form[key], id],
-    } as Partial<AppSettings>);
 
-  const submit = () => {
+  /** Sincroniza a modalidade principal garantindo que sports permaneça consistente e sem duplicação */
+  const handlePrimarySportChange = (newPrimary: string) => {
+    isDirtyRef.current = true;
+    const currentPrimary = form?.primary_sport || "futebol";
+    const currentAdditionals = (form?.sports ?? []).filter(
+      (s) => s !== currentPrimary && s !== newPrimary,
+    );
+    const updatedSports = Array.from(new Set([newPrimary, ...currentAdditionals]));
+    setForm((f) =>
+      f
+        ? {
+            ...f,
+            primary_sport: newPrimary,
+            sports: updatedSports,
+          }
+        : f,
+    );
+  };
+
+  /** Alterna modalidades adicionais sem permitir que a modalidade principal seja desativada ou duplicada */
+  const toggleAdditionalSport = (key: string) => {
+    isDirtyRef.current = true;
+    const currentPrimary = form?.primary_sport || "futebol";
+    const currentAdditionals = (form?.sports ?? []).filter((s) => s !== currentPrimary);
+    const nextAdditionals = currentAdditionals.includes(key)
+      ? currentAdditionals.filter((s) => s !== key)
+      : [...currentAdditionals, key];
+    const updatedSports = Array.from(new Set([currentPrimary, ...nextAdditionals]));
+    setForm((f) => (f ? { ...f, sports: updatedSports } : f));
+  };
+
+  const toggle = (key: "favorite_competitions" | "favorite_states", id: string) => {
+    isDirtyRef.current = true;
+    setForm((f) =>
+      f
+        ? {
+            ...f,
+            [key]: f[key].includes(id) ? f[key].filter((v) => v !== id) : [...f[key], id],
+          }
+        : f,
+    );
+  };
+
+  const isSaving = save.isPending || saveProfile.isPending;
+
+  const submit = async () => {
+    if (!form) return;
     if (whatsappInput.trim() && !isValidWhatsapp(whatsappInput)) {
       toast.error("Informe um WhatsApp válido com DDD.");
       return;
     }
-    if (profileForm) {
-      saveProfile.mutate({ ...profileForm, whatsapp: normalizeWhatsapp(whatsappInput) });
+
+    try {
+      if (profileForm) {
+        await saveProfile.mutateAsync({
+          ...profileForm,
+          whatsapp: normalizeWhatsapp(whatsappInput),
+        });
+      }
+
+      // Garante o envio explícito das modalidades e cor de destaque
+      const currentPrimary = form.primary_sport || "futebol";
+      const currentSports = form.sports?.length ? form.sports : [currentPrimary];
+      const currentAccent = form.accent || accent || "indigo";
+
+      const payload: AppSettings = {
+        ...form,
+        primary_sport: currentPrimary,
+        sports: currentSports,
+        accent: currentAccent,
+      };
+
+      // Executa a mutation e aguarda a confirmação do Supabase com o registro retornado
+      const updated = await save.mutateAsync(payload);
+
+      // Atualiza formulário com dados confirmados e limpa dirty flag
+      isDirtyRef.current = false;
+      setForm(updated);
+
+      // Re-aplica a cor persistida no banco
+      if (updated.accent && ACCENTS.some((a) => a.id === updated.accent)) {
+        setAccent(updated.accent as AccentId);
+      }
+
+      toast.success("Configurações salvas.");
+    } catch (error) {
+      console.error("Erro ao salvar configurações:", error);
+      toast.error("Não foi possível salvar as configurações.");
     }
-    save.mutate(form, {
-      onSuccess: () => toast.success("Configurações salvas."),
-      onError: () => toast.error("Não foi possível salvar as configurações."),
-    });
   };
 
   return (
@@ -219,8 +301,8 @@ function SettingsPage() {
             Perfil, fotógrafo, preferências e aparência.
           </p>
         </div>
-        <Button onClick={submit} disabled={save.isPending}>
-          {save.isPending ? "Salvando…" : "Salvar alterações"}
+        <Button onClick={submit} disabled={isSaving}>
+          {isSaving ? "Salvando…" : "Salvar alterações"}
         </Button>
       </header>
 
@@ -377,17 +459,48 @@ function SettingsPage() {
 
       <Section
         title="Modalidades"
-        description="Escolha as modalidades que fazem parte da sua rotina. Usaremos isso para deixar o FotoPress mais organizado para você."
+        description="Escolha sua modalidade principal e outras que você também cobre para deixar o FotoPress perfeitamente organizado."
       >
-        <div className="space-y-2 sm:col-span-2">
-          <Chips
-            options={SPORT_OPTIONS.map((s) => ({ id: s.key, label: s.label }))}
-            selected={form.sports}
-            onToggle={toggleSport}
-          />
+        <div className="space-y-4 sm:col-span-2">
+          {/* Seletor exclusivo de Modalidade Principal */}
+          <div className="space-y-2">
+            <Label htmlFor="primary-sport-select">Modalidade principal</Label>
+            <Select
+              value={form.primary_sport || "futebol"}
+              onValueChange={handlePrimarySportChange}
+            >
+              <SelectTrigger id="primary-sport-select" className="w-full sm:w-80">
+                <SelectValue placeholder="Selecione sua modalidade principal" />
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                {SPORT_OPTIONS.map((s) => (
+                  <SelectItem key={s.key} value={s.key}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Define a prioridade das suas coberturas e orienta os termos da sua interface.
+            </p>
+          </div>
+
+          {/* Chips para Outras modalidades que você cobre */}
+          <div className="space-y-2">
+            <Label>Outras modalidades que você cobre</Label>
+            <Chips
+              options={SPORT_OPTIONS.filter((s) => s.key !== (form.primary_sport || "futebol")).map(
+                (s) => ({ id: s.key, label: s.label }),
+              )}
+              selected={(form.sports ?? []).filter((s) => s !== (form.primary_sport || "futebol"))}
+              onToggle={toggleAdditionalSport}
+            />
+          </div>
+
           <p className="text-xs text-muted-foreground">
-            Isso muda apenas a organização da interface. Desativar uma modalidade nunca apaga jogos,
-            eventos, fontes, atletas ou histórico. Sem nenhuma escolha, mostramos tudo.
+            Isso muda apenas a organização da interface. Alterar ou desativar modalidades{" "}
+            <strong>nunca apaga</strong> jogos, eventos, fontes, atletas ou histórico existentes.
+            Sem nenhuma escolha secundária, focamos na sua modalidade principal.
           </p>
         </div>
       </Section>
@@ -450,9 +563,12 @@ function SettingsPage() {
               <button
                 key={a.id}
                 type="button"
-                onClick={() => setAccent(a.id)}
+                onClick={() => {
+                  setAccent(a.id);
+                  set({ accent: a.id });
+                }}
                 className={`rounded-md border px-3 py-1.5 text-xs transition-colors ${
-                  accent === a.id
+                  (form.accent || accent) === a.id
                     ? "border-primary bg-primary/10 font-medium text-primary"
                     : "border-border text-muted-foreground hover:bg-accent"
                 }`}

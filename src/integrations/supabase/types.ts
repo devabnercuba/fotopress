@@ -105,6 +105,7 @@ export type Database = {
       };
       app_settings: {
         Row: {
+          accent: string;
           agency: string | null;
           city: string | null;
           company: string | null;
@@ -123,6 +124,7 @@ export type Database = {
           min_value: number | null;
           phone: string | null;
           photo_url: string | null;
+          primary_sport: string;
           sports: Json;
           state: string | null;
           theme: string;
@@ -131,6 +133,7 @@ export type Database = {
           website: string | null;
         };
         Insert: {
+          accent?: string;
           agency?: string | null;
           city?: string | null;
           company?: string | null;
@@ -149,6 +152,7 @@ export type Database = {
           min_value?: number | null;
           phone?: string | null;
           photo_url?: string | null;
+          primary_sport?: string;
           sports?: Json;
           state?: string | null;
           theme?: string;
@@ -157,6 +161,7 @@ export type Database = {
           website?: string | null;
         };
         Update: {
+          accent?: string;
           agency?: string | null;
           city?: string | null;
           company?: string | null;
@@ -175,6 +180,7 @@ export type Database = {
           min_value?: number | null;
           phone?: string | null;
           photo_url?: string | null;
+          primary_sport?: string;
           sports?: Json;
           state?: string | null;
           theme?: string;

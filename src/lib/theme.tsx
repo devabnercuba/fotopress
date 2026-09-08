@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useSettings } from "./settings";
 
 export type ThemeMode = "light" | "dark";
 
@@ -21,6 +22,23 @@ type ThemeContextValue = {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+/**
+ * Garante que o banco de dados seja a fonte principal das preferências de cor.
+ * O localStorage atua somente como apoio visual para evitar flash de estilo.
+ */
+function SettingsThemeSync() {
+  const { data: settings } = useSettings();
+  const { setAccent } = useTheme();
+
+  useEffect(() => {
+    if (settings?.accent && ACCENTS.some((a) => a.id === settings.accent)) {
+      setAccent(settings.accent as AccentId);
+    }
+  }, [settings?.accent, setAccent]);
+
+  return null;
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<ThemeMode>("light");
   const [accent, setAccent] = useState<AccentId>("indigo");
@@ -29,7 +47,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const savedMode = localStorage.getItem("theme-mode") as ThemeMode | null;
     const savedAccent = localStorage.getItem("theme-accent") as AccentId | null;
     if (savedMode) setMode(savedMode);
-    if (savedAccent) setAccent(savedAccent);
+    if (savedAccent && ACCENTS.some((a) => a.id === savedAccent)) {
+      setAccent(savedAccent);
+    }
   }, []);
 
   useEffect(() => {
@@ -46,6 +66,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   return (
     <ThemeContext.Provider value={{ mode, accent, setMode, setAccent }}>
+      <SettingsThemeSync />
       {children}
     </ThemeContext.Provider>
   );

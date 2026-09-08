@@ -13,18 +13,34 @@ import { normalizeSport } from "./sports";
 export const SPORT_OPTIONS = [
   { key: "futebol", label: "Futebol de campo" },
   { key: "futsal", label: "Futsal" },
-  { key: "corrida", label: "Corrida" },
-  { key: "beach-tennis", label: "Beach Tennis" },
-  { key: "crossfit", label: "CrossFit" },
-  { key: "volei", label: "Vôlei" },
-  { key: "ciclismo", label: "Ciclismo" },
-  { key: "triathlon", label: "Triathlon" },
+  { key: "futebol-7", label: "Futebol 7" },
   { key: "beach-soccer", label: "Beach Soccer" },
   { key: "futevolei", label: "Futevôlei" },
-  { key: "outros", label: "Outros" },
+  { key: "beach-tennis", label: "Beach Tennis" },
+  { key: "volei", label: "Vôlei" },
+  { key: "basquete", label: "Basquete" },
+  { key: "handebol", label: "Handebol" },
+  { key: "corrida", label: "Corrida de rua" },
+  { key: "atletismo", label: "Atletismo" },
+  { key: "ciclismo", label: "Ciclismo" },
+  { key: "mountain-bike", label: "Mountain Bike" },
+  { key: "triathlon", label: "Triathlon" },
+  { key: "natacao", label: "Natação" },
+  { key: "surf", label: "Surf" },
+  { key: "tenis", label: "Tênis" },
+  { key: "artes-marciais", label: "Artes marciais" },
+  { key: "crossfit", label: "CrossFit" },
+  { key: "automobilismo", label: "Automobilismo" },
+  { key: "motociclismo", label: "Motociclismo" },
+  { key: "outros", label: "Outras modalidades esportivas" },
 ] as const;
 
 export type SportKey = (typeof SPORT_OPTIONS)[number]["key"];
+
+/** Valida se uma chave pertence exatamente ao catálogo SPORT_OPTIONS */
+export function isValidSportKey(key: unknown): key is SportKey {
+  return typeof key === "string" && SPORT_OPTIONS.some((s) => s.key === key.trim());
+}
 
 /** Rótulo apresentável de uma chave de modalidade. */
 export function sportLabel(key: string) {
@@ -32,29 +48,65 @@ export function sportLabel(key: string) {
 }
 
 /**
- * Preferências do usuário. Conta nova (lista vazia) significa
- * "mostrar tudo" — nunca deixa a interface inutilizável.
+ * Computa de forma pura as preferências esportivas do usuário.
+ * - primarySport: usa "futebol" como fallback e valida chave com SPORT_OPTIONS.
+ * - activeSports: sempre inclui a modalidade principal, sem duplicações.
+ * - additionalSports: nunca inclui a modalidade principal.
+ */
+export function computeSportPreferences(
+  settingsPrimarySport?: string | null,
+  settingsSports?: string[] | null,
+) {
+  const rawPrimary = typeof settingsPrimarySport === "string" ? settingsPrimarySport.trim() : "";
+  const primarySport = isValidSportKey(rawPrimary) ? rawPrimary : "futebol";
+
+  const rawSports = Array.isArray(settingsSports) ? settingsSports : [];
+
+  const activeSportsSet = new Set<string>([primarySport]);
+  for (const s of rawSports) {
+    if (typeof s === "string" && s.trim()) {
+      activeSportsSet.add(s.trim());
+    }
+  }
+
+  const activeSports = Array.from(activeSportsSet);
+  const additionalSports = activeSports.filter((s) => s !== primarySport);
+  const hasPreferences =
+    rawSports.length > 0 || (!!settingsPrimarySport && settingsPrimarySport.trim() !== "futebol");
+
+  return {
+    primarySport,
+    activeSports,
+    additionalSports,
+    hasPreferences,
+    isActive: (key: string) => activeSports.length === 0 || activeSports.includes(key),
+  };
+}
+
+/**
+ * Preferências do usuário. Conta nova ou sem escolhas utiliza
+ * futebol como modalidade principal padrão.
  */
 export function useSportPreferences() {
   const { data: settings, isLoading } = useSettings();
-  const sports = useMemo(
-    () => (Array.isArray(settings?.sports) ? (settings!.sports as string[]) : []),
-    [settings],
+  const computed = useMemo(
+    () => computeSportPreferences(settings?.primary_sport, settings?.sports),
+    [settings?.primary_sport, settings?.sports],
   );
+
   return {
     isLoading,
-    /** Chaves ativas; vazio = usuário ainda não escolheu. */
-    sports,
-    hasPreferences: sports.length > 0,
-    isActive: (key: string) => sports.length === 0 || sports.includes(key),
+    ...computed,
+    /** Compatibilidade retroativa para código existente que consome `sports` */
+    sports: computed.activeSports,
   };
 }
 
 /** Modalidades ativas em rótulos livres (usados por eventos e atletas). */
 export function useSportLabelPriority() {
-  const { sports } = useSportPreferences();
+  const { activeSports } = useSportPreferences();
   return useMemo(
-    () => sports.map((key) => normalizeSport(sportLabel(key))!).filter(Boolean),
-    [sports],
+    () => activeSports.map((key) => normalizeSport(sportLabel(key))!).filter(Boolean),
+    [activeSports],
   );
 }
