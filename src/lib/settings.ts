@@ -62,7 +62,7 @@ export function useSettings() {
       if (row) return normalizeSettings(row as Record<string, unknown>);
       const { data: created, error: createError } = await supabase
         .from("app_settings")
-        .insert({ user_id: user!.id })
+        .upsert({ user_id: user!.id }, { onConflict: "user_id" })
         .select(SELECT)
         .single();
       if (createError) throw createError;

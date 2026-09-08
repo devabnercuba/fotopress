@@ -57,11 +57,14 @@ async function provision(
 
   if (!settings) {
     tasks.push(
-      supabase.from("app_settings").insert({
-        user_id: userId,
-        email,
-        full_name: fullName.trim() || null,
-      }),
+      supabase.from("app_settings").upsert(
+        {
+          user_id: userId,
+          email,
+          full_name: fullName.trim() || null,
+        },
+        { onConflict: "user_id" },
+      ),
     );
   }
   if (!access) {
