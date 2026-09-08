@@ -55,6 +55,7 @@ import {
 } from "@/lib/coverages";
 import { useDataSources } from "@/lib/data-sources";
 import { useMatches, type Match } from "@/lib/queries";
+import { usesMatchFirstWorkflow } from "@/lib/sport-form-config";
 import { useSportPreferences } from "@/lib/sport-preferences";
 import { useSportTerminology } from "@/lib/sport-terminology";
 
@@ -90,6 +91,25 @@ function JogosPage() {
   const { primarySport } = useSportPreferences();
   const terminology = useSportTerminology();
   const isFutebol = primarySport === "futebol";
+  const matchFirst = usesMatchFirstWorkflow(primarySport);
+
+  const defaultTab = matchFirst ? "partidas" : "eventos";
+  const [tab, setTab] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem("fotopress_jogos_tab");
+      if (saved === "partidas" || saved === "eventos") {
+        return saved;
+      }
+    }
+    return defaultTab;
+  });
+
+  const handleTabChange = (nextTab: string) => {
+    setTab(nextTab);
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("fotopress_jogos_tab", nextTab);
+    }
+  };
 
   const headerTitle = isFutebol ? "Jogos" : terminology.coveragePlural;
   const headerDescription = isFutebol
@@ -105,7 +125,7 @@ function JogosPage() {
         <p className="mt-1 text-sm text-muted-foreground">{headerDescription}</p>
       </header>
 
-      <Tabs defaultValue="partidas" className="space-y-6">
+      <Tabs value={tab} onValueChange={handleTabChange} className="space-y-6">
         <TabsList>
           <TabsTrigger value="partidas">Partidas</TabsTrigger>
           <TabsTrigger value="eventos">Eventos</TabsTrigger>

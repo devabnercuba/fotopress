@@ -16,6 +16,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchableCompetitionSelect } from "@/components/searchable-competition-select";
 import { supabase } from "@/integrations/supabase/client";
+import { participantLabels } from "@/lib/sport-form-config";
+import { useSportPreferences } from "@/lib/sport-preferences";
+import { useSportTerminology } from "@/lib/sport-terminology";
 
 const EMPTY = {
   competition_id: "",
@@ -40,6 +43,11 @@ export function NewMatchDialog({
   hideTrigger?: boolean;
 }) {
   const qc = useQueryClient();
+  const { primarySport } = useSportPreferences();
+  const terminology = useSportTerminology();
+  const participants = participantLabels(primarySport);
+  const isFutebol = primarySport === "futebol";
+
   const [internalOpen, setInternalOpen] = useState(false);
   const open = openProp ?? internalOpen;
   const setOpen = (v: boolean) => {
@@ -68,11 +76,18 @@ export function NewMatchDialog({
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["matches"] });
-      toast.success("Jogo cadastrado.");
+      toast.success(
+        isFutebol ? "Jogo cadastrado." : `${terminology.coverageSingular} cadastrado(a).`,
+      );
       setForm(EMPTY);
       setOpen(false);
     },
-    onError: () => toast.error("Não foi possível cadastrar o jogo."),
+    onError: () =>
+      toast.error(
+        isFutebol
+          ? "Não foi possível cadastrar o jogo."
+          : `Não foi possível cadastrar ${terminology.coverageSingular.toLowerCase()}.`,
+      ),
   });
 
   function submit() {
@@ -84,26 +99,33 @@ export function NewMatchDialog({
     create.mutate();
   }
 
+  const triggerLabel = isFutebol ? "Nova partida" : `Nova partida`;
+  const dialogTitle = isFutebol ? "Novo jogo" : `Nova partida / ${terminology.coverageSingular}`;
+  const dialogDescription = isFutebol
+    ? "Cadastre uma partida manualmente, sem depender de importação."
+    : `Cadastre ${terminology.coverageSingular.toLowerCase()} manualmente, sem depender de importação.`;
+  const submitLabel = isFutebol
+    ? "Salvar jogo"
+    : `Salvar ${terminology.coverageSingular.toLowerCase()}`;
+
   return (
     <>
       {!hideTrigger && (
         <Button size="sm" className={className} onClick={() => setOpen(true)}>
-          <Plus className="size-4" /> Nova partida
+          <Plus className="size-4" /> {triggerLabel}
         </Button>
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Novo jogo</DialogTitle>
-            <DialogDescription>
-              Cadastre uma partida manualmente, sem depender de importação.
-            </DialogDescription>
+            <DialogTitle>{dialogTitle}</DialogTitle>
+            <DialogDescription>{dialogDescription}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label>Campeonato</Label>
+              <Label>{terminology.competitionSingular}</Label>
               <SearchableCompetitionSelect
                 value={form.competition_id || null}
                 onChange={(v) => set({ competition_id: v })}
@@ -133,7 +155,7 @@ export function NewMatchDialog({
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="match-home">Mandante</Label>
+                <Label htmlFor="match-home">{participants.homeLabel}</Label>
                 <Input
                   id="match-home"
                   maxLength={80}
@@ -142,7 +164,7 @@ export function NewMatchDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="match-away">Visitante</Label>
+                <Label htmlFor="match-away">{participants.awayLabel}</Label>
                 <Input
                   id="match-away"
                   maxLength={80}
@@ -153,7 +175,7 @@ export function NewMatchDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="match-venue">Estádio</Label>
+              <Label htmlFor="match-venue">{terminology.venueLabel}</Label>
               <Input
                 id="match-venue"
                 maxLength={120}
@@ -190,7 +212,7 @@ export function NewMatchDialog({
               Cancelar
             </Button>
             <Button onClick={submit} disabled={create.isPending}>
-              Salvar jogo
+              {submitLabel}
             </Button>
           </DialogFooter>
         </DialogContent>

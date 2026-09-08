@@ -39,13 +39,16 @@ import {
   ATHLETE_STATUS_LABEL,
   formatCategoryLabel,
   normalizeCategory,
-  POSITIONS,
   RELATIONSHIPS,
   RELATIONSHIP_LABEL,
   useAthleteMutations,
   useAthletes,
   type Athlete,
 } from "@/lib/athletes";
+import { athleteNumberLabel, athleteRoleSuggestions } from "@/lib/sport-form-config";
+import { useSportPreferences } from "@/lib/sport-preferences";
+import { getSportTerminology } from "@/lib/sport-terminology";
+import { cn } from "@/lib/utils";
 import {
   CONTACT_LABEL,
   PACKAGE_LABEL,
@@ -136,9 +139,17 @@ function AthleteDialog({
   trigger?: React.ReactNode;
 }) {
   const { save } = useAthleteMutations();
+  const { primarySport } = useSportPreferences();
 
   const [photo, setPhoto] = useState<File | null>(null);
   const [form, setForm] = useState(empty);
+
+  const currentSport = form.sport || primarySport || "futebol";
+  const terminology = getSportTerminology(currentSport);
+  const roleLabel = terminology.athleteRoleLabel;
+  const teamLabel = terminology.teamSingular;
+  const numberLabel = athleteNumberLabel(currentSport);
+  const roleSuggestions = athleteRoleSuggestions(currentSport);
 
   useEffect(() => {
     if (!open) return;
@@ -180,8 +191,8 @@ function AthleteDialog({
       toast.error("Informe o nome completo do contato (mínimo 2 caracteres).");
       return;
     }
-    if (form.number && Number(form.number) > 999) {
-      toast.error("Número da camisa inválido.");
+    if (form.number && (Number(form.number) < 0 || Number(form.number) > 999999)) {
+      toast.error(`${numberLabel} inválido(a).`);
       return;
     }
     save.mutate(
@@ -190,7 +201,7 @@ function AthleteDialog({
         name,
         nickname: form.nickname.trim() || null,
         team_id: form.team_id,
-        position: form.position || null,
+        position: form.position?.trim() || null,
         number: form.number.trim() ? Number(form.number) : null,
         instagram: form.instagram.trim().replace(/^@/, "") || null,
         notes: form.notes.trim() || null,
@@ -228,7 +239,7 @@ function AthleteDialog({
           <DialogDescription>
             {editing
               ? "Ajuste os dados do contato já cadastrado e confirme para salvar."
-              : "Atletas, clientes, comissão técnica e imprensa vinculados aos clubes. Os dados de contato são opcionais."}
+              : `Atletas, clientes, comissão técnica e imprensa vinculados a ${teamLabel.toLowerCase()}s. Os dados de contato são opcionais.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -258,7 +269,7 @@ function AthleteDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Clube (opcional)</Label>
+            <Label>{teamLabel} (opcional)</Label>
             <SearchableTeamSelect value={form.team_id} onChange={(team_id) => set({ team_id })} />
           </div>
 
@@ -267,27 +278,51 @@ function AthleteDialog({
             <CategorySelect value={form.category} onChange={(category) => set({ category })} />
           </div>
 
-          <div className="grid grid-cols-[1fr_100px] gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_130px] gap-3 items-start">
             <div className="space-y-1.5">
-              <Label>Posição</Label>
-              <Select value={form.position} onValueChange={(v) => set({ position: v })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  {POSITIONS.map((p) => (
-                    <SelectItem key={p} value={p}>
-                      {p}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="athlete-position">{roleLabel}</Label>
+              <Input
+                id="athlete-position"
+                list="athlete-position-suggestions"
+                placeholder={`Ex: ${roleSuggestions[0] || "Atleta"}`}
+                value={form.position}
+                onChange={(e) => set({ position: e.target.value })}
+              />
+              <datalist id="athlete-position-suggestions">
+                {roleSuggestions.map((suggestion) => (
+                  <option key={suggestion} value={suggestion} />
+                ))}
+              </datalist>
+              <div className="flex flex-wrap gap-1 pt-1">
+                {roleSuggestions.map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    onClick={() => set({ position: suggestion })}
+                    className={cn(
+                      "rounded-md border px-1.5 py-0.5 text-[11px] transition-colors",
+                      form.position === suggestion
+                        ? "border-primary bg-primary/10 text-primary font-medium"
+                        : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground",
+                    )}
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="athlete-number">Camisa</Label>
+              <Label htmlFor="athlete-number">{numberLabel}</Label>
               <Input
                 id="athlete-number"
                 inputMode="numeric"
+                placeholder={
+                  numberLabel === "Número de peito"
+                    ? "Ex: 1042"
+                    : numberLabel === "Número do veículo"
+                      ? "Ex: 44"
+                      : "Ex: 10"
+                }
                 value={form.number}
                 onChange={(e) => set({ number: e.target.value.replace(/\D/g, "") })}
               />
