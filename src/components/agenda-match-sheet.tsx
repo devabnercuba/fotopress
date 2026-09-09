@@ -1,12 +1,21 @@
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { CalendarPlus, Download, ExternalLink } from "lucide-react";
 
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { MatchClientsPanel } from "@/components/match-clients-panel";
 import { RadarPanel } from "@/components/radar-panel";
 
 import { compStyle } from "@/lib/competitions";
+import { exportMatchToIcs, getGoogleCalendarUrl, matchToSportEvent } from "@/lib/calendar-export";
 import type { Coverage } from "@/lib/coverages";
 import type { Radar } from "@/lib/radar";
 
@@ -66,6 +75,52 @@ export function AgendaMatchSheet({
                     label="Cidade"
                     value={[match.city, match.state].filter(Boolean).join(" · ") || "A definir"}
                   />
+
+                  <div className="mt-5 pt-3 border-t border-border flex flex-wrap gap-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          id="agenda-match-export-calendar-btn"
+                          variant="outline"
+                          size="sm"
+                          className="w-full gap-2 text-xs"
+                        >
+                          <CalendarPlus className="size-4 text-primary" />
+                          <span>Adicionar ao Calendário</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuItem
+                          id="agenda-match-download-ics"
+                          onClick={() => exportMatchToIcs(match)}
+                          className="cursor-pointer gap-2 text-xs"
+                        >
+                          <Download className="size-4 text-primary" />
+                          <div className="flex flex-col">
+                            <span className="font-medium">Baixar arquivo (.ics)</span>
+                            <span className="text-[10px] text-muted-foreground">
+                              Apple Calendar, Outlook e outros
+                            </span>
+                          </div>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild className="cursor-pointer gap-2 text-xs">
+                          <a
+                            href={getGoogleCalendarUrl(matchToSportEvent(match))}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <ExternalLink className="size-4 text-primary" />
+                            <div className="flex flex-col">
+                              <span className="font-medium">Google Agenda</span>
+                              <span className="text-[10px] text-muted-foreground">
+                                Adicionar via navegador
+                              </span>
+                            </div>
+                          </a>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="clientes" className="mt-5">

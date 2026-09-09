@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   List,
+  Search,
   Trash2,
   Volleyball,
   X,
@@ -17,6 +18,7 @@ import { toast } from "sonner";
 import { EmptyState } from "@/components/empty-state";
 import { NewMatchDialog } from "@/components/new-match-dialog";
 import { EventsTab } from "@/components/events-tab";
+import { EventSearchInput, type SearchScope } from "@/components/event-search-input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,10 +56,11 @@ import {
   type CredentialStatus,
 } from "@/lib/coverages";
 import { useDataSources } from "@/lib/data-sources";
-import { useMatches, type Match } from "@/lib/queries";
+import { useMatches, useCompetitions, type Match } from "@/lib/queries";
 import { usesMatchFirstWorkflow } from "@/lib/sport-form-config";
 import { useSportPreferences } from "@/lib/sport-preferences";
 import { useSportTerminology } from "@/lib/sport-terminology";
+import { stripAccents } from "@/lib/teams";
 
 export const Route = createFileRoute("/_authenticated/jogos")({
   validateSearch: (search: Record<string, unknown>): { source?: string } => ({
@@ -143,6 +146,7 @@ function JogosPage() {
 
 function MatchesPage() {
   const { data: matches = [], isLoading } = useMatches();
+  const { data: competitions = [] } = useCompetitions();
   const { data: coverages = [] } = useCoverages();
   const { request } = useCoverageMutations();
 
@@ -157,6 +161,7 @@ function MatchesPage() {
   const { source: sourceParam } = Route.useSearch();
   const [sourceFilter, setSourceFilter] = useState(sourceParam ?? ALL);
   const [search, setSearch] = useState("");
+  const [searchScope, setSearchScope] = useState<SearchScope>("all");
 
   const [dateRange, setDateRange] = useState<DateRange>(EMPTY_RANGE);
 
@@ -168,6 +173,14 @@ function MatchesPage() {
 
   const byMatch = useMemo(() => coverageByMatch(coverages), [coverages]);
 
+  const competitionMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of competitions) {
+      map.set(c.id, c.name);
+    }
+    return map;
+  }, [competitions]);
+
   const states = useMemo(
     () =>
       [...new Set(matches.map((m) => m.state).filter(Boolean) as string[])].sort((a, b) =>
@@ -177,23 +190,47 @@ function MatchesPage() {
   );
 
   const rows = useMemo(() => {
-    const term = search.trim().toLowerCase();
+    const term = stripAccents(search.trim().toLowerCase());
     return matches.filter((m) => {
       const st = byMatch[m.id]?.credential_status ?? "not_requested";
       if (status !== ALL && st !== status) return false;
       if (state !== ALL && (m.state ?? "") !== state) return false;
       if (sourceFilter !== ALL && (m.source_id ?? "") !== sourceFilter) return false;
       if (!inDateRange(m.date, dateRange)) return false;
-      if (
-        term &&
-        ![m.home_team, m.away_team, m.venue, m.city]
+      if (term) {
+        const compName = m.competition_id ? (competitionMap.get(m.competition_id) ?? "") : "";
+        const teamMatch = [m.home_team, m.away_team]
           .filter(Boolean)
-          .some((v) => String(v).toLowerCase().includes(term))
-      )
-        return false;
+          .some((v) => stripAccents(String(v).toLowerCase()).includes(term));
+        const compMatch = [compName, m.competition_id]
+          .filter(Boolean)
+          .some((v) => stripAccents(String(v).toLowerCase()).includes(term));
+        const otherMatch = [m.venue, m.city]
+          .filter(Boolean)
+          .some((v) => stripAccents(String(v).toLowerCase()).includes(term));
+
+        if (searchScope === "team") {
+          if (!teamMatch) return false;
+        } else if (searchScope === "competition") {
+          if (!compMatch) return false;
+        } else {
+          // searchScope === "all"
+          if (!teamMatch && !compMatch && !otherMatch) return false;
+        }
+      }
       return true;
     });
-  }, [matches, status, state, sourceFilter, search, dateRange, byMatch]);
+  }, [
+    matches,
+    status,
+    state,
+    sourceFilter,
+    search,
+    searchScope,
+    dateRange,
+    byMatch,
+    competitionMap,
+  ]);
 
   /** Jogos do mês em exibição, agrupados por data — base da visão mobile. */
   const monthGroups = useMemo(() => {
@@ -355,52 +392,60 @@ function MatchesPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          placeholder="Buscar time, estádio ou cidade"
+      <div className="space-y-3">
+        <EventSearchInput
+          id="matches-search-input"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full sm:w-[240px]"
+          onChange={setSearch}
+          scope={searchScope}
+          onScopeChange={setSearchScope}
+          placeholder="Buscar por participante (time), campeonato, estádio ou cidade..."
+          resultsCount={rows.length}
+          totalCount={matches.length}
         />
-        <Select value={sourceFilter} onValueChange={setSourceFilter}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Fonte" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>Todas as fontes</SelectItem>
-            {sources.map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                {s.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
 
-        <Select value={state} onValueChange={setState}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Estado" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>Todos os estados</SelectItem>
-            {states.map((uf) => (
-              <SelectItem key={uf} value={uf}>
-                {uf}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="w-[190px]">
-            <SelectValue placeholder="Credenciamento" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>Todos os status</SelectItem>
-            <SelectItem value="not_requested">Não solicitado</SelectItem>
-            <SelectItem value="requested">Solicitado</SelectItem>
-            <SelectItem value="approved">Aprovado</SelectItem>
-            <SelectItem value="denied">Negado</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={sourceFilter} onValueChange={setSourceFilter}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Fonte" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>Todas as fontes</SelectItem>
+              {sources.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={state} onValueChange={setState}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Estado" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>Todos os estados</SelectItem>
+              {states.map((uf) => (
+                <SelectItem key={uf} value={uf}>
+                  {uf}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger className="w-[190px]">
+              <SelectValue placeholder="Credenciamento" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>Todos os status</SelectItem>
+              <SelectItem value="not_requested">Não solicitado</SelectItem>
+              <SelectItem value="requested">Solicitado</SelectItem>
+              <SelectItem value="approved">Aprovado</SelectItem>
+              <SelectItem value="denied">Negado</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="space-y-2 rounded-xl border border-border bg-card p-3">
@@ -414,12 +459,33 @@ function MatchesPage() {
         <p className="text-sm text-muted-foreground">Carregando…</p>
       ) : view === "lista" ? (
         rows.length === 0 ? (
-          <EmptyState
-            icon={Volleyball}
-            title="Nenhum jogo encontrado"
-            description="Depois de adicionar uma fonte ou cadastrar uma partida, seus jogos aparecerão aqui."
-            learnLabel="Como importar jogos"
-          />
+          search.trim().length > 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-12 text-center">
+              <Search className="size-8 text-muted-foreground/50 mb-2" />
+              <h3 className="text-sm font-medium">Nenhum resultado encontrado</h3>
+              <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+                Não encontramos jogos para &ldquo;{search}&rdquo; com os filtros atuais.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4 text-xs"
+                onClick={() => {
+                  setSearch("");
+                  setSearchScope("all");
+                }}
+              >
+                Limpar busca
+              </Button>
+            </div>
+          ) : (
+            <EmptyState
+              icon={Volleyball}
+              title="Nenhum jogo encontrado"
+              description="Depois de adicionar uma fonte ou cadastrar uma partida, seus jogos aparecerão aqui."
+              learnLabel="Como importar jogos"
+            />
+          )
         ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{rows.map(renderCard)}</div>
         )

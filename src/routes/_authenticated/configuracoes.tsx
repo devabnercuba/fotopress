@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Moon, Sun } from "lucide-react";
+import { Eye, Moon, Sun } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -153,7 +153,7 @@ function Chips({
 }
 
 function SettingsPage() {
-  const { mode, setMode, accent, setAccent } = useTheme();
+  const { mode, setMode, accent, setAccent, highContrast, setHighContrast } = useTheme();
   const { data: settings, isLoading } = useSettings();
   const { data: competitions = [] } = useCompetitions();
   const save = useSettingsMutation();
@@ -553,6 +553,23 @@ function SettingsPage() {
               setMode(checked ? "dark" : "light");
               set({ theme: checked ? "dark" : "light" });
             }}
+          />
+        </div>
+
+        <div className="flex items-center justify-between gap-3 sm:col-span-2">
+          <div className="flex items-center gap-3">
+            <Eye className="size-4 text-primary" />
+            <div>
+              <div className="text-sm font-medium">Alto contraste</div>
+              <div className="text-xs text-muted-foreground">
+                Bordas nítidas e contraste máximo para deficiência visual ou uso sob sol forte
+              </div>
+            </div>
+          </div>
+          <Switch
+            id="high-contrast-toggle"
+            checked={highContrast}
+            onCheckedChange={(checked) => setHighContrast(checked)}
           />
         </div>
 

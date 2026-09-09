@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Copy, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { CalendarPlus, Copy, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -22,6 +22,7 @@ import {
 import { MatchEditSheet } from "@/components/match-edit-sheet";
 import { useMatchMutations } from "@/lib/matches";
 import { coverageByMatch, useCoverages } from "@/lib/coverages";
+import { exportMatchToIcs } from "@/lib/calendar-export";
 import type { Match } from "@/lib/queries";
 
 /** Ações rápidas de uma partida: editar, duplicar e excluir. */
@@ -56,6 +57,9 @@ export function MatchActions({ match }: { match: Match }) {
         <DropdownMenuContent align="end" className="w-40">
           <DropdownMenuItem onSelect={() => setEditing(true)}>
             <Pencil className="size-4" /> Editar
+          </DropdownMenuItem>
+          <DropdownMenuItem id={`export-ics-${match.id}`} onSelect={() => exportMatchToIcs(match)}>
+            <CalendarPlus className="size-4" /> Baixar .ics
           </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={() =>

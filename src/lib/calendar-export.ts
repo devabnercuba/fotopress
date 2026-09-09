@@ -1,5 +1,7 @@
 import { format, parseISO } from "date-fns";
 import type { ISportEvent, SportEvent } from "@/schemas/sport-event";
+import type { Match } from "./queries";
+import type { SportEvent as AgendaSportEvent } from "./events";
 
 /**
  * Formata uma data e hora para o padrão iCalendar UTC (YYYYMMDDTHHmmssZ)
@@ -176,4 +178,152 @@ export async function shareSportsEvent(
   }
 
   return { method: "clipboard", success: false };
+}
+
+/**
+ * Converte uma partida cadastrada (Match) no formato de evento para ICS.
+ */
+export function matchToSportEvent(match: Match): ISportEvent {
+  return {
+    id: match.id,
+    title: `${match.home_team} × ${match.away_team}`,
+    sportType: match.competition?.sport_key ?? "Futebol",
+    date: match.date,
+    time: match.time ? match.time.slice(0, 5) : "16:00",
+    venue: match.venue,
+    city: match.city,
+    state: match.state,
+    competition: match.competition?.name,
+    homeTeam: match.home_team,
+    awayTeam: match.away_team,
+    notes: match.notes,
+    status: "scheduled",
+  };
+}
+
+/**
+ * Converte um evento esportivo cadastrado na agenda (SportEvent) para o formato de exportação.
+ */
+export function agendaSportEventToExport(event: AgendaSportEvent): ISportEvent {
+  return {
+    id: event.id,
+    title: event.name,
+    sportType: event.sport,
+    date: event.start_date,
+    time: event.start_time ? event.start_time.slice(0, 5) : "08:00",
+    venue: event.venue,
+    city: event.city,
+    state: event.state,
+    notes: [event.notes, event.organizer ? `Organizador: ${event.organizer}` : null]
+      .filter(Boolean)
+      .join(" | "),
+    status: "scheduled",
+  };
+}
+
+/**
+ * Exporta uma partida (Match) individual para arquivo .ics
+ */
+export function exportMatchToIcs(match: Match): void {
+  exportEventToIcs(matchToSportEvent(match));
+}
+
+/**
+ * Exporta um evento da agenda (SportEvent) individual para arquivo .ics
+ */
+export function exportAgendaSportEventToIcs(event: AgendaSportEvent): void {
+  exportEventToIcs(agendaSportEventToExport(event));
+}
+
+/**
+ * Gera e baixa um arquivo .ics contendo múltiplos eventos/jogos da agenda do usuário.
+ */
+export function exportAgendaToIcs(
+  items: Array<{
+    type: "match" | "event";
+    match?: Match | null;
+    event?: AgendaSportEvent | null;
+  }>,
+  calendarTitle = "Minha Agenda — FotoPress",
+): void {
+  if (!items || items.length === 0) return;
+
+  const nowStr = format(new Date(), "yyyyMMdd'T'HHmmss'Z'");
+
+  const veventBlocks: string[] = [];
+
+  for (const item of items) {
+    let ev: ISportEvent | null = null;
+    if (item.type === "match" && item.match) {
+      ev = matchToSportEvent(item.match);
+    } else if (item.type === "event" && item.event) {
+      ev = agendaSportEventToExport(item.event);
+    }
+
+    if (!ev || !ev.date) continue;
+
+    const { dtStart, dtEnd } = toIcsDateString(ev.date, ev.time);
+    const summary = ev.homeTeam && ev.awayTeam ? `${ev.homeTeam} × ${ev.awayTeam}` : ev.title;
+
+    const locationParts = [ev.venue, ev.city, ev.state].filter(Boolean);
+    const location = locationParts.join(", ");
+
+    const descriptionParts = [
+      `Evento: ${summary}`,
+      ev.sportType ? `Modalidade: ${ev.sportType}` : null,
+      ev.competition ? `Competição: ${ev.competition}` : null,
+      location ? `Local: ${location}` : null,
+      ev.notes ? `Observações: ${ev.notes}` : null,
+    ].filter(Boolean);
+
+    const description = descriptionParts.join("\\n");
+
+    const block = [
+      "BEGIN:VEVENT",
+      `UID:fotopress-${ev.id}@fotopress.app`,
+      `DTSTAMP:${nowStr}`,
+      `DTSTART:${dtStart}`,
+      `DTEND:${dtEnd}`,
+      `SUMMARY:${summary.replace(/,/g, "\\,")}`,
+      `DESCRIPTION:${description}`,
+      location ? `LOCATION:${location.replace(/,/g, "\\,")}` : "",
+      "STATUS:CONFIRMED",
+      "END:VEVENT",
+    ]
+      .filter(Boolean)
+      .join("\r\n");
+
+    veventBlocks.push(block);
+  }
+
+  if (veventBlocks.length === 0) return;
+
+  const icsContent = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//FotoPress//Sports Agenda//PT",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    `X-WR-CALNAME:${calendarTitle}`,
+    ...veventBlocks,
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  const safeFilename = calendarTitle
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  link.href = url;
+  link.setAttribute("download", `${safeFilename || "agenda-fotopress"}.ics`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }

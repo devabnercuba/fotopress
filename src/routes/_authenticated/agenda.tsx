@@ -1,12 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarDays, Check, List, Star, Trash2 } from "lucide-react";
+import { CalendarDays, CalendarPlus, Check, Download, List, Star, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { AgendaMatchSheet } from "@/components/agenda-match-sheet";
 import { EventDetailSheet } from "@/components/event-detail-sheet";
 import { EmptyState } from "@/components/empty-state";
+import { exportAgendaToIcs } from "@/lib/calendar-export";
 import {
   DateRangeFilter,
   EMPTY_RANGE,
@@ -164,21 +165,45 @@ function AgendaPage() {
             {timeline.length === 1 ? "cobertura aprovada" : "coberturas aprovadas"}.
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-1 rounded-lg border border-border p-0.5">
-          <Button
-            size="sm"
-            variant={view === "lista" ? "secondary" : "ghost"}
-            onClick={() => setView("lista")}
-          >
-            <List className="size-4" /> Lista
-          </Button>
-          <Button
-            size="sm"
-            variant={view === "calendario" ? "secondary" : "ghost"}
-            onClick={() => setView("calendario")}
-          >
-            <CalendarDays className="size-4" /> Calendário
-          </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          {timeline.length > 0 && (
+            <Button
+              id="export-agenda-ics-btn"
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                exportAgendaToIcs(
+                  timeline.map((item) => ({
+                    type: item.kind,
+                    match: item.kind === "match" ? item.coverage.match : null,
+                    event: item.kind === "event" ? item.coverage.event : null,
+                  })),
+                  "Minha Agenda — FotoPress",
+                )
+              }
+              className="gap-1.5 text-xs"
+              title="Baixar arquivo .ics com todos os eventos aprovados da agenda"
+            >
+              <Download className="size-4 text-primary" />
+              <span className="hidden sm:inline">Exportar .ics</span>
+            </Button>
+          )}
+          <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
+            <Button
+              size="sm"
+              variant={view === "lista" ? "secondary" : "ghost"}
+              onClick={() => setView("lista")}
+            >
+              <List className="size-4" /> Lista
+            </Button>
+            <Button
+              size="sm"
+              variant={view === "calendario" ? "secondary" : "ghost"}
+              onClick={() => setView("calendario")}
+            >
+              <CalendarDays className="size-4" /> Calendário
+            </Button>
+          </div>
         </div>
       </header>
 

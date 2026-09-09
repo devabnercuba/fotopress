@@ -16,8 +16,11 @@ export type AccentId = (typeof ACCENTS)[number]["id"];
 type ThemeContextValue = {
   mode: ThemeMode;
   accent: AccentId;
+  highContrast: boolean;
   setMode: (mode: ThemeMode) => void;
   setAccent: (accent: AccentId) => void;
+  setHighContrast: (highContrast: boolean) => void;
+  toggleHighContrast: () => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -42,14 +45,17 @@ function SettingsThemeSync() {
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<ThemeMode>("light");
   const [accent, setAccent] = useState<AccentId>("indigo");
+  const [highContrast, setHighContrast] = useState<boolean>(false);
 
   useEffect(() => {
     const savedMode = localStorage.getItem("theme-mode") as ThemeMode | null;
     const savedAccent = localStorage.getItem("theme-accent") as AccentId | null;
+    const savedHighContrast = localStorage.getItem("theme-high-contrast") === "true";
     if (savedMode) setMode(savedMode);
     if (savedAccent && ACCENTS.some((a) => a.id === savedAccent)) {
       setAccent(savedAccent);
     }
+    if (savedHighContrast) setHighContrast(true);
   }, []);
 
   useEffect(() => {
@@ -58,14 +64,31 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [mode]);
 
   useEffect(() => {
+    document.documentElement.classList.toggle("high-contrast", highContrast);
+    localStorage.setItem("theme-high-contrast", String(highContrast));
+  }, [highContrast]);
+
+  useEffect(() => {
     const found = ACCENTS.find((a) => a.id === accent) ?? ACCENTS[0];
     document.documentElement.style.setProperty("--primary-hue", String(found.hue));
     document.documentElement.style.setProperty("--primary-chroma", String(found.chroma));
     localStorage.setItem("theme-accent", accent);
   }, [accent]);
 
+  const toggleHighContrast = () => setHighContrast((prev) => !prev);
+
   return (
-    <ThemeContext.Provider value={{ mode, accent, setMode, setAccent }}>
+    <ThemeContext.Provider
+      value={{
+        mode,
+        accent,
+        highContrast,
+        setMode,
+        setAccent,
+        setHighContrast,
+        toggleHighContrast,
+      }}
+    >
       <SettingsThemeSync />
       {children}
     </ThemeContext.Provider>

@@ -1,12 +1,18 @@
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarCheck, ExternalLink, Pencil, Trash2 } from "lucide-react";
+import { CalendarCheck, CalendarPlus, Download, ExternalLink, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { EventCommercialPanel } from "@/components/event-commercial-panel";
 import { EventFormDialog } from "@/components/event-form-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,6 +42,11 @@ import {
 } from "@/lib/events";
 import { useEventEngagements } from "@/lib/event-engagements";
 import { formatSportLabel } from "@/lib/sports";
+import {
+  agendaSportEventToExport,
+  exportAgendaSportEventToIcs,
+  getGoogleCalendarUrl,
+} from "@/lib/calendar-export";
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -221,6 +232,50 @@ export function EventDetailSheet({
                     </section>
 
                     <div className="flex flex-wrap gap-2">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            id="event-export-calendar-btn"
+                            variant="outline"
+                            size="sm"
+                            className="gap-2 text-xs"
+                          >
+                            <CalendarPlus className="size-4 text-primary" />
+                            <span>Exportar Calendário</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-56">
+                          <DropdownMenuItem
+                            id="event-download-ics"
+                            onClick={() => exportAgendaSportEventToIcs(event)}
+                            className="cursor-pointer gap-2 text-xs"
+                          >
+                            <Download className="size-4 text-primary" />
+                            <div className="flex flex-col">
+                              <span className="font-medium">Baixar arquivo (.ics)</span>
+                              <span className="text-[10px] text-muted-foreground">
+                                Apple Calendar, Outlook e outros
+                              </span>
+                            </div>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild className="cursor-pointer gap-2 text-xs">
+                            <a
+                              href={getGoogleCalendarUrl(agendaSportEventToExport(event))}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <ExternalLink className="size-4 text-primary" />
+                              <div className="flex flex-col">
+                                <span className="font-medium">Google Agenda</span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  Adicionar via navegador
+                                </span>
+                              </div>
+                            </a>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+
                       <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
                         <Pencil className="size-4" /> Editar
                       </Button>
