@@ -66,6 +66,7 @@ import {
   type SportEvent,
 } from "@/lib/events";
 import { formatSportLabel } from "@/lib/sports";
+import { cn } from "@/lib/utils";
 
 const ALL = "todos";
 

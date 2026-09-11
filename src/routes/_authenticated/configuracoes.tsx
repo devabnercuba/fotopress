@@ -25,6 +25,7 @@ import { ACCENTS, useTheme, type AccentId } from "@/lib/theme";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatWhatsapp, isValidWhatsapp, maskWhatsapp, normalizeWhatsapp } from "@/lib/whatsapp";
 import { NotificationPreferences } from "@/components/notification-preferences";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
   head: () => ({

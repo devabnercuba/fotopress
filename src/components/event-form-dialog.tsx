@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { SportSelect } from "@/components/sport-select";
 import { EVENT_STATUS, useEventMutations, type EventStatus, type SportEvent } from "@/lib/events";
+import { cn } from "@/lib/utils";
 
 const EMPTY = {
   name: "",
