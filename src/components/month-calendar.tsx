@@ -13,6 +13,7 @@ import { ptBR } from "date-fns/locale";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { TeamCrest } from "@/components/team-crest";
 import { compStyle } from "@/lib/competitions";
 import type { Match } from "@/lib/queries";
 
@@ -107,11 +108,15 @@ export function MonthCalendar({
                       onClick={() => onSelect(match)}
                       className={`w-full rounded-md border-l-2 bg-surface px-1.5 py-1 text-left transition-colors hover:bg-accent ${style.bar}`}
                     >
-                      <div className="text-[10px] font-medium text-muted-foreground">
-                        {match.time.slice(0, 5)}
+                      <div className="flex items-center justify-between text-[10px] font-medium text-muted-foreground">
+                        <span>{match.time.slice(0, 5)}</span>
                       </div>
-                      <div className="truncate text-[11px] leading-tight font-medium">
-                        {match.home_team} × {match.away_team}
+                      <div className="flex items-center gap-1 text-[11px] leading-tight font-medium my-0.5">
+                        <TeamCrest name={match.home_team} teamId={match.home_team_id} size="xs" />
+                        <span className="truncate flex-1">
+                          {match.home_team} × {match.away_team}
+                        </span>
+                        <TeamCrest name={match.away_team} teamId={match.away_team_id} size="xs" />
                       </div>
                       <div className={`truncate text-[10px] ${style.text}`}>
                         {match.competition?.name}

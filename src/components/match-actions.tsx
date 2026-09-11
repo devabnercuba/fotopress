@@ -22,7 +22,7 @@ import {
 import { MatchEditSheet } from "@/components/match-edit-sheet";
 import { useMatchMutations } from "@/lib/matches";
 import { coverageByMatch, useCoverages } from "@/lib/coverages";
-import { exportMatchToIcs } from "@/lib/calendar-export";
+import { exportMatchToIcs, getGoogleCalendarUrl, matchToSportEvent } from "@/lib/calendar-export";
 import type { Match } from "@/lib/queries";
 
 /** Ações rápidas de uma partida: editar, duplicar e excluir. */
@@ -60,6 +60,17 @@ export function MatchActions({ match }: { match: Match }) {
           </DropdownMenuItem>
           <DropdownMenuItem id={`export-ics-${match.id}`} onSelect={() => exportMatchToIcs(match)}>
             <CalendarPlus className="size-4" /> Baixar .ics
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild id={`google-cal-${match.id}`}>
+            <a
+              href={getGoogleCalendarUrl(matchToSportEvent(match))}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 cursor-pointer w-full"
+            >
+              <CalendarPlus className="size-4 text-primary" />
+              <span>Google Calendar</span>
+            </a>
           </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={() =>

@@ -92,21 +92,32 @@ type CardData = {
 const NOT_A_CREST =
   /sprite|icon|logo-cbf|brand-cbf|placeholder|banner|patrocinador|sponsor|bandeira|flag|logo_competicoes|favicon/i;
 
+const ATTR_SRC = /src\s*=\s*["']([^"']+)["']/i;
+const ATTR_DATA_SRC = /data-src\s*=\s*["']([^"']+)["']/i;
+const ATTR_DATA_ORIGINAL = /data-original\s*=\s*["']([^"']+)["']/i;
+const ATTR_SRCSET = /srcset\s*=\s*["']([^"']+)["']/i;
+const ATTR_ALT = /alt\s*=\s*["']([^"']+)["']/i;
+const ATTR_TITLE = /title\s*=\s*["']([^"']+)["']/i;
+const ATTR_CLASS = /class\s*=\s*["']([^"']+)["']/i;
+
 /** Todas as URLs de imagem de um trecho de HTML, já absolutas. */
 function imageUrls(fragment: string, base: string): string[] {
   const raw: string[] = [];
   for (const tag of fragment.matchAll(/<(?:img|source)\b[^>]*>/gi)) {
     const el = tag[0];
-    const attr = (name: string) =>
-      el.match(new RegExp(`${name}\\s*=\\s*["']([^"']+)["']`, "i"))?.[1] ?? "";
-    const srcset = attr("srcset");
+    const src = el.match(ATTR_SRC)?.[1] ?? "";
+    const dataSrc = el.match(ATTR_DATA_SRC)?.[1] ?? "";
+    const dataOrig = el.match(ATTR_DATA_ORIGINAL)?.[1] ?? "";
+    const srcset = el.match(ATTR_SRCSET)?.[1] ?? "";
+    const alt = `${el.match(ATTR_ALT)?.[1] ?? ""} ${el.match(ATTR_TITLE)?.[1] ?? ""} ${el.match(ATTR_CLASS)?.[1] ?? ""}`;
+
     const candidates = [
-      attr("src"),
-      attr("data-src"),
-      attr("data-original"),
+      src,
+      dataSrc,
+      dataOrig,
       srcset.split(",")[0]?.trim().split(/\s+/)[0] ?? "",
     ].filter(Boolean);
-    const alt = `${attr("alt")} ${attr("title")} ${attr("class")}`;
+
     for (const candidate of candidates) {
       if (NOT_A_CREST.test(candidate) || NOT_A_CREST.test(alt)) continue;
       try {
@@ -200,6 +211,7 @@ function pageCompetition(url: string) {
 async function fetchHtml(url: string): Promise<string> {
   const direct = async () =>
     fetch(url, {
+      signal: AbortSignal.timeout(4000),
       headers: {
         "user-agent": UA,
         accept: "text/html,application/xhtml+xml",
@@ -216,6 +228,7 @@ async function fetchHtml(url: string): Promise<string> {
 
   if (!response || !response.ok) {
     const mirror = await fetch(`https://r.jina.ai/${url}`, {
+      signal: AbortSignal.timeout(12000),
       headers: { "user-agent": UA, "x-return-format": "html" },
     });
     if (!mirror.ok) {
@@ -278,7 +291,7 @@ function readCredencialCards(html: string, base = "https://credencial.cbf.com.br
       awayLogo: crests[1],
     };
 
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       console.debug(
         `CBF logo: ${data.homeTeam} → ${data.homeLogo ?? "escudo não localizado no HTML"} | ` +
           `${data.awayTeam} → ${data.awayLogo ?? "escudo não localizado no HTML"}`,

@@ -1,5 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
+  Bell,
   CalendarDays,
   Camera,
   CheckCircle2,
@@ -205,6 +206,7 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
       { to: "/calendario", label: "Calendário", icon: CalendarDays },
       { to: "/credenciamento", label: "Credenciamento", icon: ClipboardList },
       { to: "/agenda", label: "Minha Agenda", icon: Star },
+      { to: "/alertas", label: "Lembretes", icon: Bell },
       { to: "/concluidos", label: "Concluídos", icon: CheckCircle2 },
     ];
   }, [terminology.coveragePlural]);

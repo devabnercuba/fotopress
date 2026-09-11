@@ -49,6 +49,16 @@ export type NormalizedMatch = {
 /** Falha de uma partida específica durante a leitura/gravação. */
 export type ImportIssue = { match: string; reason: string };
 
+/** Etapa atual de progresso de importação para feedback em tempo real. */
+export type ImportProgressStep = {
+  step: "fetch" | "parse" | "entities" | "logos" | "persist" | "done";
+  message: string;
+  current?: number;
+  total?: number;
+};
+
+export type OnImportProgress = (progress: ImportProgressStep) => void;
+
 /** Alias público do contrato (mesma forma, nome pedido na especificação). */
 export type ImportedMatch = NormalizedMatch;
 
@@ -61,6 +71,8 @@ export type ParseInput = {
   competition?: string;
   /** Temporada da fonte: origens com histórico só importam o ano escolhido. */
   season?: string;
+  /** Callback para progresso de leitura. */
+  onProgress?: OnImportProgress;
 };
 
 export type CollectResult = {

@@ -79,10 +79,19 @@ export const sportEventSchema = z.object({
   // Campos adicionais e contextuais de modalidades esportivas
   homeTeam: z.string().trim().max(80).nullable().optional(),
   awayTeam: z.string().trim().max(80).nullable().optional(),
+  homeTeamId: z.string().nullable().optional(),
+  awayTeamId: z.string().nullable().optional(),
+  imageUrl: z.string().nullable().optional(),
   competition: z.string().trim().max(100).nullable().optional(),
+  competitionColor: z.string().nullable().optional(),
   city: z.string().trim().max(80).nullable().optional(),
   state: z.string().trim().max(2).toUpperCase().nullable().optional(),
   notes: z.string().trim().max(500).nullable().optional(),
+  credentialStatus: z
+    .enum(["not_requested", "requested", "approved", "denied"])
+    .nullable()
+    .optional(),
+  isMatch: z.boolean().optional(),
   createdAt: z
     .string()
     .optional()
@@ -111,10 +120,16 @@ export interface ISportEvent {
   status: SportEventStatus;
   homeTeam?: string | null;
   awayTeam?: string | null;
+  homeTeamId?: string | null;
+  awayTeamId?: string | null;
+  imageUrl?: string | null;
   competition?: string | null;
+  competitionColor?: string | null;
   city?: string | null;
   state?: string | null;
   notes?: string | null;
+  credentialStatus?: "not_requested" | "requested" | "approved" | "denied" | null;
+  isMatch?: boolean;
   createdAt?: string;
 }
 

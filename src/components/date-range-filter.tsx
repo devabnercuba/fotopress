@@ -10,32 +10,41 @@ export const EMPTY_RANGE: DateRange = { from: "", to: "" };
 
 const iso = (d: Date) => format(d, "yyyy-MM-dd");
 
+export const getTodayRange = (): DateRange => ({ from: iso(new Date()), to: iso(new Date()) });
+export const getTomorrowRange = (): DateRange => {
+  const d = addDays(new Date(), 1);
+  return { from: iso(d), to: iso(d) };
+};
+export const getThisWeekRange = (): DateRange => ({
+  from: iso(startOfWeek(new Date(), { weekStartsOn: 1 })),
+  to: iso(endOfWeek(new Date(), { weekStartsOn: 1 })),
+});
+export const getNext7DaysRange = (): DateRange => ({
+  from: iso(new Date()),
+  to: iso(addDays(new Date(), 7)),
+});
+export const getThisMonthRange = (): DateRange => ({
+  from: iso(startOfMonth(new Date())),
+  to: iso(endOfMonth(new Date())),
+});
+
 /** Presets rápidos de período. */
 const presets = [
   {
     label: "Hoje",
-    build: (): DateRange => ({ from: iso(new Date()), to: iso(new Date()) }),
-  },
-  {
-    label: "Amanhã",
-    build: (): DateRange => {
-      const d = addDays(new Date(), 1);
-      return { from: iso(d), to: iso(d) };
-    },
+    build: getTodayRange,
   },
   {
     label: "Esta semana",
-    build: (): DateRange => ({
-      from: iso(startOfWeek(new Date(), { weekStartsOn: 1 })),
-      to: iso(endOfWeek(new Date(), { weekStartsOn: 1 })),
-    }),
+    build: getThisWeekRange,
+  },
+  {
+    label: "Próximos 7 dias",
+    build: getNext7DaysRange,
   },
   {
     label: "Este mês",
-    build: (): DateRange => ({
-      from: iso(startOfMonth(new Date())),
-      to: iso(endOfMonth(new Date())),
-    }),
+    build: getThisMonthRange,
   },
 ];
 

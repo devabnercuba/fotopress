@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Eye, Moon, Sun } from "lucide-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Bell, Clock, Eye, Moon, ShieldAlert, ShieldCheck, Sun, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -24,6 +24,7 @@ import { SPORT_OPTIONS } from "@/lib/sport-preferences";
 import { ACCENTS, useTheme, type AccentId } from "@/lib/theme";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatWhatsapp, isValidWhatsapp, maskWhatsapp, normalizeWhatsapp } from "@/lib/whatsapp";
+import { NotificationPreferences } from "@/components/notification-preferences";
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
   head: () => ({
@@ -538,6 +539,39 @@ function SettingsPage() {
         </div>
       </Section>
 
+      <Section
+        title="Lembretes & Notificações Push"
+        description="Avisos automáticos no navegador antes do início das suas coberturas agendadas."
+      >
+        <div className="sm:col-span-2 flex flex-col gap-4">
+          <div className="flex items-center justify-between p-3 rounded-lg border border-primary/20 bg-primary/5">
+            <div className="flex items-center gap-2.5">
+              <Bell className="size-4 text-primary" />
+              <div>
+                <div className="text-xs font-semibold text-foreground">
+                  Página Dedicada de Notificações
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  Ajuste avançado de tempo de aviso (15, 30, 60 min), canais e testes.
+                </div>
+              </div>
+            </div>
+            <Button
+              asChild
+              size="sm"
+              variant="outline"
+              className="text-xs h-8 gap-1 border-primary/40 text-primary hover:bg-primary/10"
+            >
+              <Link to="/notificacoes">
+                <span>Abrir página completa</span>
+                <span className="sr-only">de notificações</span>
+              </Link>
+            </Button>
+          </div>
+          <NotificationPreferences showCardWrapper={false} />
+        </div>
+      </Section>
+
       <Section title="Aparência">
         <div className="flex items-center justify-between gap-3 sm:col-span-2">
           <div className="flex items-center gap-3">
@@ -556,18 +590,41 @@ function SettingsPage() {
           />
         </div>
 
-        <div className="flex items-center justify-between gap-3 sm:col-span-2">
-          <div className="flex items-center gap-3">
-            <Eye className="size-4 text-primary" />
-            <div>
-              <div className="text-sm font-medium">Alto contraste</div>
+        <div
+          id="config-high-contrast-card"
+          className="flex items-center justify-between gap-3 rounded-lg border border-border/80 bg-muted/20 p-3.5 sm:col-span-2"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Eye className="size-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">Modo Alto Contraste</span>
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                    highContrast
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {highContrast ? "Ativo" : "Desativado"}
+                </span>
+              </div>
               <div className="text-xs text-muted-foreground">
-                Bordas nítidas e contraste máximo para deficiência visual ou uso sob sol forte
+                Alterna a classe CSS{" "}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
+                  high-contrast
+                </code>{" "}
+                no elemento root, proporcionando bordas nítidas e máxima legibilidade para
+                acessibilidade ou uso sob luz solar intensa.
               </div>
             </div>
           </div>
           <Switch
             id="high-contrast-toggle"
+            aria-label="Ativar modo de alto contraste para acessibilidade"
             checked={highContrast}
             onCheckedChange={(checked) => setHighContrast(checked)}
           />

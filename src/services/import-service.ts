@@ -2,13 +2,20 @@ import { supabase } from "@/integrations/supabase/client";
 
 import { createOperationBatch } from "@/lib/batches";
 import { DEFAULT_SPORT_KEY, cacheTeamLogos, ensureTeams, teamIdentityKey } from "@/lib/teams";
+import { mapConcurrent, chunk } from "@/lib/async-pool";
 
 import { fpfImporter } from "./importers/fpf-importer";
 import { lnfImporter } from "./importers/lnf-importer";
 import { pdfImporter } from "./importers/pdf-importer";
 import { csvImporter, excelImporter } from "./importers/spreadsheet-importer";
 import { urlImporter } from "./importers/url-importer";
-import type { Importer, ImportIssue, NormalizedMatch, SourceType } from "./importers/types";
+import type {
+  Importer,
+  ImportIssue,
+  NormalizedMatch,
+  SourceType,
+  OnImportProgress,
+} from "./importers/types";
 
 /**
  * Traduz erros técnicos de persistência para mensagens compreensíveis.
@@ -87,25 +94,45 @@ async function ensureCompetitions(
 
   const map = new Map((existing ?? []).map((c) => [c.name.toLowerCase(), c.id]));
 
+  const toCreate = unique
+    .filter((name) => !map.has(name.toLowerCase()))
+    .map((name, index) => ({
+      name,
+      season,
+      color: COLORS[(map.size + index) % COLORS.length],
+      sport_key: context.sportKey,
+      category: context.category || "Futebol",
+      gender: context.gender ?? null,
+    }));
+
   let created = 0;
-  for (const name of unique) {
-    if (map.has(name.toLowerCase())) continue;
-    const { data, error } = await supabase
+  if (toCreate.length > 0) {
+    const { data: inserted, error } = await supabase
       .from("competitions")
-      .insert({
-        name,
-        season,
-        color: COLORS[map.size % COLORS.length],
-        sport_key: context.sportKey,
-        category: context.category || "Futebol",
-        gender: context.gender ?? null,
-      })
-      .select("id, name")
-      .single();
-    if (error) throw error;
-    map.set(data.name.toLowerCase(), data.id);
-    created += 1;
+      .insert(toCreate)
+      .select("id, name");
+
+    if (!error && inserted) {
+      for (const comp of inserted) {
+        map.set(comp.name.toLowerCase(), comp.id);
+        created += 1;
+      }
+    } else {
+      // Fallback seguro individual
+      for (const item of toCreate) {
+        const { data, error: singleError } = await supabase
+          .from("competitions")
+          .insert(item)
+          .select("id, name")
+          .single();
+        if (!singleError && data) {
+          map.set(data.name.toLowerCase(), data.id);
+          created += 1;
+        }
+      }
+    }
   }
+
   return { map, created };
 }
 
@@ -154,6 +181,8 @@ export async function persistMatches(
     category?: string | null;
     /** Gênero da competição, quando aplicável. */
     gender?: string | null;
+    /** Callback de progresso em tempo real por etapa. */
+    onProgress?: OnImportProgress;
   },
 ): Promise<PersistResult> {
   const season = options.season || String(new Date().getFullYear());
@@ -172,6 +201,11 @@ export async function persistMatches(
     gender,
   });
 
+  options.onProgress?.({
+    step: "entities",
+    message: "Validando competições e clubes participantes...",
+  });
+
   const { map: competitionMap, created: competitionsCreated } = await ensureCompetitions(
     matches.map((m) => m.competition),
     season,
@@ -185,8 +219,23 @@ export async function persistMatches(
     ]),
   );
 
-  // Guarda os escudos publicados pela origem no armazenamento do projeto.
-  await cacheTeamLogos([...byIdentity.values()]);
+  // Guarda os escudos publicados pela origem no armazenamento do projeto (concorrência limitada).
+  options.onProgress?.({
+    step: "logos",
+    message: "Verificando escudos dos clubes...",
+  });
+
+  await cacheTeamLogos([...byIdentity.values()], {
+    concurrency: 4,
+    onProgress: (cur, tot) => {
+      options.onProgress?.({
+        step: "logos",
+        message: `Otimizando escudos dos clubes (${cur}/${tot})...`,
+        current: cur,
+        total: tot,
+      });
+    },
+  });
 
   const { data: existingMatches } = await supabase
     .from("matches")
@@ -337,35 +386,48 @@ export async function persistMatches(
     inserts.push(row);
   }
 
+  options.onProgress?.({
+    step: "persist",
+    message: `Gravando partidas (${inserts.length} novas, ${updates.length} atualizadas)...`,
+  });
+
   let imported = 0;
   if (inserts.length > 0) {
-    const { error } = await supabase.from("matches").insert(inserts as never);
-    if (!error) {
-      imported = inserts.length;
-    } else {
-      // Grava um a um para identificar exatamente qual jogo falhou.
-      for (const row of inserts) {
-        const { error: rowError } = await supabase.from("matches").insert(row as never);
-        if (rowError) {
-          errors.push({
-            match: `${row.home_team} × ${row.away_team} — ${row.date} ${row.time}`,
-            reason: friendlyPersistError(rowError.message),
-          });
-        } else {
-          imported += 1;
+    const insertBatches = chunk(inserts, 100);
+    for (const batchRows of insertBatches) {
+      const { error } = await supabase.from("matches").insert(batchRows as never);
+      if (!error) {
+        imported += batchRows.length;
+      } else {
+        // Grava um a um para identificar exatamente qual jogo falhou.
+        for (const row of batchRows) {
+          const { error: rowError } = await supabase.from("matches").insert(row as never);
+          if (rowError) {
+            errors.push({
+              match: `${row.home_team} × ${row.away_team} — ${row.date} ${row.time}`,
+              reason: friendlyPersistError(rowError.message),
+            });
+          } else {
+            imported += 1;
+          }
         }
       }
     }
   }
 
   let updated = 0;
-  for (const update of updates) {
-    const { error } = await supabase
-      .from("matches")
-      .update(update.patch as never)
-      .eq("id", update.id);
-    if (error) errors.push({ match: update.label, reason: friendlyPersistError(error.message) });
-    else updated += 1;
+  if (updates.length > 0) {
+    await mapConcurrent(updates, 6, async (update) => {
+      const { error } = await supabase
+        .from("matches")
+        .update(update.patch as never)
+        .eq("id", update.id);
+      if (error) {
+        errors.push({ match: update.label, reason: friendlyPersistError(error.message) });
+      } else {
+        updated += 1;
+      }
+    });
   }
 
   // Registra o lote para permitir "Desfazer importação" no Histórico.
@@ -469,6 +531,7 @@ export async function collectMatches(params: {
   url?: string | null;
   competition?: string;
   season?: string;
+  onProgress?: OnImportProgress;
 }) {
   const importer = getImporter(params.type);
   const input = {
@@ -476,6 +539,7 @@ export async function collectMatches(params: {
     url: params.url ?? undefined,
     competition: params.competition,
     season: params.season,
+    onProgress: params.onProgress,
   };
   if (importer.collect) return importer.collect(input);
   const matches = await importer.parse(input);
@@ -490,10 +554,22 @@ export async function runImport(params: {
   url?: string | null;
   competition?: string;
   season?: string;
+  onProgress?: OnImportProgress;
 }): Promise<PersistResult> {
   const importer = getImporter(params.type);
   try {
+    params.onProgress?.({
+      step: "fetch",
+      message:
+        params.type === "url" && params.url?.includes("cbf")
+          ? "Conectando à CBF e baixando tabela..."
+          : "Lendo dados da origem...",
+    });
     const collected = await collectMatches(params);
+    params.onProgress?.({
+      step: "parse",
+      message: `Identificados ${collected.matches.length} confrontos para processar...`,
+    });
     const result = await persistMatches(collected.matches, {
       sourceTag: importer.sourceTag,
       season: params.season,
@@ -502,12 +578,17 @@ export async function runImport(params: {
       issues: collected.errors,
       found: collected.found,
       matchByExternalId: params.type === "lnf" || params.type === "fpf",
+      onProgress: params.onProgress,
     });
     await recordImport({
       dataSourceId: params.dataSourceId,
       sourceType: params.type,
       status: "success",
       result,
+    });
+    params.onProgress?.({
+      step: "done",
+      message: "Importação concluída com sucesso!",
     });
     return result;
   } catch (error) {

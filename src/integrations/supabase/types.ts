@@ -838,6 +838,7 @@ export type Database = {
           id: string;
           match_id: string;
           notes: string | null;
+          reminder_enabled: boolean | null;
           updated_at: string;
           user_id: string | null;
         };
@@ -848,6 +849,7 @@ export type Database = {
           id?: string;
           match_id: string;
           notes?: string | null;
+          reminder_enabled?: boolean | null;
           updated_at?: string;
           user_id?: string | null;
         };
@@ -858,6 +860,7 @@ export type Database = {
           id?: string;
           match_id?: string;
           notes?: string | null;
+          reminder_enabled?: boolean | null;
           updated_at?: string;
           user_id?: string | null;
         };
@@ -979,6 +982,7 @@ export type Database = {
           event_id: string;
           id: string;
           notes: string | null;
+          reminder_enabled: boolean | null;
           updated_at: string;
           user_id: string;
         };
@@ -989,6 +993,7 @@ export type Database = {
           event_id: string;
           id?: string;
           notes?: string | null;
+          reminder_enabled?: boolean | null;
           updated_at?: string;
           user_id?: string;
         };
@@ -999,6 +1004,7 @@ export type Database = {
           event_id?: string;
           id?: string;
           notes?: string | null;
+          reminder_enabled?: boolean | null;
           updated_at?: string;
           user_id?: string;
         };

@@ -17,6 +17,7 @@ import {
 import { toast } from "sonner";
 
 import { EventStatusBadge } from "@/components/event-status-badge";
+import { TeamCrest } from "@/components/team-crest";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -139,24 +140,45 @@ export function SportsEventDetailsDialog({
             </Button>
           </div>
 
-          <DialogHeader className="text-left space-y-1">
+          <DialogHeader className="text-left space-y-2">
             <DialogTitle className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
               {event.homeTeam && event.awayTeam ? (
-                <span className="flex items-center gap-2">
-                  <span>{event.homeTeam}</span>
-                  <span className="text-muted-foreground font-normal text-sm">×</span>
-                  <span>{event.awayTeam}</span>
-                </span>
+                <div className="flex items-center gap-3">
+                  <TeamCrest name={event.homeTeam} teamId={event.homeTeamId} size="lg" />
+                  <div className="min-w-0 flex-1">
+                    <span>{event.homeTeam}</span>
+                    <span className="text-muted-foreground font-normal text-sm mx-2">×</span>
+                    <span>{event.awayTeam}</span>
+                  </div>
+                  <TeamCrest name={event.awayTeam} teamId={event.awayTeamId} size="lg" />
+                </div>
               ) : (
                 event.title
               )}
             </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground flex items-center gap-2">
+            <DialogDescription className="text-xs text-muted-foreground flex flex-wrap items-center gap-2">
               <EventStatusBadge
                 status={event.status as SportEventStatus}
+                label={
+                  event.status === "scheduled"
+                    ? event.isMatch
+                      ? "Partida agendada"
+                      : "Evento agendado"
+                    : undefined
+                }
                 size="sm"
                 showIcon={true}
               />
+              {event.credentialStatus === "approved" && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                  <Check className="size-3" /> Na Minha Agenda
+                </span>
+              )}
+              {event.credentialStatus === "requested" && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                  <Clock className="size-3" /> Solicitação enviada
+                </span>
+              )}
               {event.city && <span className="text-muted-foreground/80">· {event.city}</span>}
             </DialogDescription>
           </DialogHeader>

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { findTeam, teamAbbreviation, teamIndex, useTeams } from "@/lib/teams";
 
 const SIZES = {
+  xs: "size-4 text-[8px]",
   sm: "size-6 text-[9px]",
   md: "size-8 text-[10px]",
   lg: "size-11 text-xs",

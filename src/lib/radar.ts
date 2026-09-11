@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isRadarEnabled } from "@/lib/features";
 import { syncRadar } from "@/services/radar-service";
 import type { Match } from "./queries";
 
@@ -58,9 +59,11 @@ function normalize(row: Record<string, unknown>): Radar {
 }
 
 export function useRadars() {
+  const enabled = isRadarEnabled();
   return useQuery({
     queryKey: ["match_radar"],
     queryFn: async (): Promise<Record<string, Radar>> => {
+      if (!isRadarEnabled()) return {};
       const { data, error } = await supabase
         .from("match_radar")
         .select(
@@ -74,14 +77,19 @@ export function useRadars() {
       }
       return map;
     },
+    enabled,
   });
 }
 
 export function useRadarSync() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ match, coverageId }: { match: Match; coverageId: string }) =>
-      syncRadar(match, coverageId),
+    mutationFn: async ({ match, coverageId }: { match: Match; coverageId: string }) => {
+      if (!isRadarEnabled()) {
+        throw new Error("O módulo Radar está temporariamente desativado.");
+      }
+      return syncRadar(match, coverageId);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["match_radar"] }),
   });
 }

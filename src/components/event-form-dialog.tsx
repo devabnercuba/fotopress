@@ -165,13 +165,37 @@ export function EventFormDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Modalidade *</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="event-sport">Esporte *</Label>
+                <span className="text-[11px] text-muted-foreground">
+                  Ex: Futebol, Vôlei, Corrida
+                </span>
+              </div>
               <SportSelect
+                id="event-sport"
                 value={form.sport}
                 onChange={(sport) => set("sport", sport)}
                 extra={sports}
-                noneLabel="Selecionar modalidade"
+                noneLabel="Selecionar esporte (ex: Futebol, Vôlei...)"
               />
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                <span className="text-[10px] text-muted-foreground">Sugestões:</span>
+                {["Futebol", "Vôlei", "Basquete", "Corrida", "Futsal", "Beach Tennis"].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => set("sport", s)}
+                    className={cn(
+                      "rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors cursor-pointer",
+                      form.sport?.toLowerCase() === s.toLowerCase()
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-surface text-muted-foreground hover:text-foreground hover:bg-accent",
+                    )}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">

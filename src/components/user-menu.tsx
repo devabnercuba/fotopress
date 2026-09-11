@@ -1,6 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, LogOut, Settings, User } from "lucide-react";
+import { Bell, ChevronDown, Eye, LogOut, Settings, User } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { displayName, initialsOf, useAuthUser, useProfile } from "@/lib/profile";
+import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 export function UserMenu({
@@ -27,6 +28,7 @@ export function UserMenu({
   const queryClient = useQueryClient();
   const { data: user } = useAuthUser();
   const { data: profile } = useProfile();
+  const { highContrast, toggleHighContrast } = useTheme();
 
   const name = displayName(profile, user?.email);
   const subtitle = profile?.professional_name?.trim() || profile?.bio?.trim() || user?.email || "";
@@ -85,6 +87,38 @@ export function UserMenu({
           }}
         >
           <Settings className="size-4" /> Configurações
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          id="user-menu-notificacoes-link"
+          onSelect={() => {
+            onAction?.();
+            navigate({ to: "/notificacoes" });
+          }}
+        >
+          <Bell className="size-4" /> Notificações
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          id="user-menu-high-contrast-toggle"
+          onSelect={(e) => {
+            e.preventDefault();
+            toggleHighContrast();
+          }}
+          className="flex items-center justify-between cursor-pointer"
+        >
+          <div className="flex items-center gap-2">
+            <Eye className="size-4" />
+            <span>Alto contraste</span>
+          </div>
+          <span
+            className={cn(
+              "rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+              highContrast
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground",
+            )}
+          >
+            {highContrast ? "On" : "Off"}
+          </span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={signOut}>

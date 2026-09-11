@@ -5,8 +5,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-sans:
-    "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -120,6 +119,8 @@
 }
 
 /* Tema de Alto Contraste para máxima legibilidade (acessibilidade / sol externo) */
+:root.high-contrast,
+html.high-contrast,
 .high-contrast {
   --background: #ffffff;
   --foreground: #000000;
@@ -153,7 +154,13 @@
   --sidebar-accent-foreground: #000000;
 }
 
-.dark.high-contrast {
+:root.dark.high-contrast,
+html.dark.high-contrast,
+:root.high-contrast.dark,
+html.high-contrast.dark,
+.dark.high-contrast,
+.high-contrast.dark,
+:is(.high-contrast.dark, .dark.high-contrast) {
   --background: #000000;
   --foreground: #ffffff;
   --surface: #0a0a0a;
@@ -189,7 +196,10 @@
 .high-contrast article,
 .high-contrast button,
 .high-contrast input,
-.high-contrast select {
+.high-contrast select,
+.high-contrast textarea,
+.high-contrast [role="button"],
+.high-contrast .border {
   border-width: 1.5px;
 }
 
@@ -215,4 +225,3 @@
 #lovable-badge {
   display: none !important;
 }
-

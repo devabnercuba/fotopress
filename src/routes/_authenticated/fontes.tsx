@@ -76,6 +76,7 @@ import {
   LNF_COMPETITIONS,
 } from "@/services/importers/lnf-source";
 import { getImporter, runImport, type PersistResult } from "@/services/import-service";
+import type { ImportProgressInfo } from "@/services/importers/types";
 
 export const Route = createFileRoute("/_authenticated/fontes")({
   head: () => ({
@@ -177,6 +178,7 @@ function DataSourcesPage() {
   const [clearing, setClearing] = useState<DataSource | null>(null);
   const [report, setReport] = useState<{ title: string; result: PersistResult } | null>(null);
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [syncStep, setSyncStep] = useState<ImportProgressInfo | null>(null);
 
   // Importação pelo modelo oficial (XLSX ou PDF exportado do modelo).
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -396,6 +398,10 @@ function DataSourcesPage() {
 
   /** URL e LNF sincronizam direto. Arquivo pede um novo envio do modelo. */
   async function sync(source: DataSource) {
+    if (syncingId) {
+      toast.info("Uma sincronização já está em andamento. Aguarde a conclusão.");
+      return;
+    }
     if (!AUTO_TYPES.includes(source.type)) {
       if (!source.competition_id) {
         toast.error("Defina o campeonato desta fonte antes de importar um arquivo.");
@@ -420,6 +426,7 @@ function DataSourcesPage() {
       return;
     }
     setSyncingId(source.id);
+    setSyncStep({ step: "fetch", message: "Conectando à fonte..." });
     try {
       const result = await runImport({
         dataSourceId: source.id,
@@ -427,6 +434,9 @@ function DataSourcesPage() {
         url: source.url,
         competition: source.competition?.name ?? source.name,
         season: source.season,
+        onProgress: (info) => {
+          setSyncStep(info);
+        },
       });
       refreshMatches();
       setReport({ title: source.name, result });
@@ -435,6 +445,7 @@ function DataSourcesPage() {
       toast.error(error instanceof Error ? error.message : "Falha ao sincronizar.");
     } finally {
       setSyncingId(null);
+      setSyncStep(null);
       touchSync.mutate(source.id);
     }
   }
@@ -581,22 +592,28 @@ function DataSourcesPage() {
               </p>
             )}
 
+            {syncingId === source.id && syncStep && (
+              <div className="mt-3 flex items-center gap-2 rounded-md bg-muted/70 px-2.5 py-1.5 text-xs text-foreground">
+                <RefreshCw className="size-3 shrink-0 animate-spin text-primary" />
+                <span className="truncate">{syncStep.message}</span>
+              </div>
+            )}
+
             <div className="mt-5 flex flex-wrap items-center gap-1 border-t border-border pt-4">
               <Button variant="ghost" size="sm" asChild>
                 <Link to="/jogos" search={{ source: source.id }}>
                   <ListChecks className="size-3.5" /> Ver jogos
                 </Link>
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={syncingId === source.id}
-                onClick={() => sync(source)}
-              >
+              <Button variant="ghost" size="sm" disabled={!!syncingId} onClick={() => sync(source)}>
                 <RefreshCw
                   className={`size-3.5 ${syncingId === source.id ? "animate-spin" : ""}`}
                 />
-                {AUTO_TYPES.includes(source.type) ? "Sincronizar" : "Reprocessar"}
+                {syncingId === source.id
+                  ? "Sincronizando..."
+                  : AUTO_TYPES.includes(source.type)
+                    ? "Sincronizar"
+                    : "Reprocessar"}
               </Button>
               {AUTO_TYPES.includes(source.type) && (
                 <Button

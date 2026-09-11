@@ -74,6 +74,11 @@ export function exportEventToIcs(event: SportEvent | ISportEvent): void {
     `DESCRIPTION:${description}`,
     location ? `LOCATION:${location.replace(/,/g, "\\,")}` : "",
     "STATUS:CONFIRMED",
+    "BEGIN:VALARM",
+    "ACTION:DISPLAY",
+    "DESCRIPTION:Lembrete de Cobertura — 30 minutos antes",
+    "TRIGGER:-PT30M",
+    "END:VALARM",
     "END:VEVENT",
     "END:VCALENDAR",
   ]
@@ -224,15 +229,37 @@ export function agendaSportEventToExport(event: AgendaSportEvent): ISportEvent {
 /**
  * Exporta uma partida (Match) individual para arquivo .ics
  */
-export function exportMatchToIcs(match: Match): void {
-  exportEventToIcs(matchToSportEvent(match));
+export function exportMatchToIcs(
+  match: Match,
+  notes?: string | null,
+  status?: string | null,
+): void {
+  const ev = matchToSportEvent(match);
+  if (notes?.trim()) {
+    ev.notes = [ev.notes, `Notas da cobertura: ${notes.trim()}`].filter(Boolean).join(" | ");
+  }
+  if (status) {
+    ev.status = status === "cancelled" ? "cancelled" : "scheduled";
+  }
+  exportEventToIcs(ev);
 }
 
 /**
  * Exporta um evento da agenda (SportEvent) individual para arquivo .ics
  */
-export function exportAgendaSportEventToIcs(event: AgendaSportEvent): void {
-  exportEventToIcs(agendaSportEventToExport(event));
+export function exportAgendaSportEventToIcs(
+  event: AgendaSportEvent,
+  notes?: string | null,
+  status?: string | null,
+): void {
+  const ev = agendaSportEventToExport(event);
+  if (notes?.trim()) {
+    ev.notes = [ev.notes, `Notas da cobertura: ${notes.trim()}`].filter(Boolean).join(" | ");
+  }
+  if (status) {
+    ev.status = status === "cancelled" ? "cancelled" : "scheduled";
+  }
+  exportEventToIcs(ev);
 }
 
 /**
@@ -243,6 +270,8 @@ export function exportAgendaToIcs(
     type: "match" | "event";
     match?: Match | null;
     event?: AgendaSportEvent | null;
+    notes?: string | null;
+    status?: "confirmed" | "pending" | "cancelled" | string | null;
   }>,
   calendarTitle = "Minha Agenda — FotoPress",
 ): void {
@@ -268,15 +297,25 @@ export function exportAgendaToIcs(
     const locationParts = [ev.venue, ev.city, ev.state].filter(Boolean);
     const location = locationParts.join(", ");
 
+    const customNotes = item.notes?.trim();
+
     const descriptionParts = [
       `Evento: ${summary}`,
       ev.sportType ? `Modalidade: ${ev.sportType}` : null,
       ev.competition ? `Competição: ${ev.competition}` : null,
       location ? `Local: ${location}` : null,
-      ev.notes ? `Observações: ${ev.notes}` : null,
+      ev.notes ? `Observações do evento: ${ev.notes}` : null,
+      customNotes ? `Notas da cobertura: ${customNotes}` : null,
     ].filter(Boolean);
 
     const description = descriptionParts.join("\\n");
+
+    let icsStatus = "CONFIRMED";
+    if (item.status === "cancelled" || item.status === "denied") {
+      icsStatus = "CANCELLED";
+    } else if (item.status === "pending" || item.status === "requested") {
+      icsStatus = "TENTATIVE";
+    }
 
     const block = [
       "BEGIN:VEVENT",
@@ -287,7 +326,12 @@ export function exportAgendaToIcs(
       `SUMMARY:${summary.replace(/,/g, "\\,")}`,
       `DESCRIPTION:${description}`,
       location ? `LOCATION:${location.replace(/,/g, "\\,")}` : "",
-      "STATUS:CONFIRMED",
+      `STATUS:${icsStatus}`,
+      "BEGIN:VALARM",
+      "ACTION:DISPLAY",
+      "DESCRIPTION:Lembrete de Cobertura — 30 minutos antes",
+      "TRIGGER:-PT30M",
+      "END:VALARM",
       "END:VEVENT",
     ]
       .filter(Boolean)

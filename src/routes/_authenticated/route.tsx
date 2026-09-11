@@ -7,6 +7,7 @@ import { OnboardingDialog } from "@/components/onboarding-dialog";
 import { WhatsNewNotifier } from "@/components/whats-new-notifier";
 import { supabase } from "@/integrations/supabase/client";
 import { useProvisionAccount } from "@/lib/provision";
+import { useCoverageRemindersDaemon } from "@/lib/coverage-reminders";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -21,6 +22,8 @@ export const Route = createFileRoute("/_authenticated")({
 function AppLayout() {
   // Cria perfil e configurações do usuário no primeiro acesso.
   useProvisionAccount();
+  // Monitora e dispara lembretes de coberturas agendadas em segundo plano.
+  useCoverageRemindersDaemon();
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">

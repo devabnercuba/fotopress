@@ -7,6 +7,7 @@ import { CalendarDays, LayoutGrid, Sparkles } from "lucide-react";
 import { MonthCalendar } from "@/components/month-calendar";
 import { MatchCard } from "@/components/match-card";
 import { MatchDetailDialog } from "@/components/match-detail-dialog";
+import { EventDetailSheet } from "@/components/event-detail-sheet";
 import { SportsEventCalendar } from "@/components/sports-event-calendar";
 import {
   Select,
@@ -17,7 +18,8 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useEvents } from "@/lib/events";
+import { useCoverages } from "@/lib/coverages";
+import { useEvents, type SportEvent as GenericSportEvent } from "@/lib/events";
 import { useCompetitions, useMatches, type Match } from "@/lib/queries";
 import type { SportEvent, SportEventStatus } from "@/schemas/sport-event";
 
@@ -45,6 +47,7 @@ function CalendarPage() {
   const [viewMode, setViewMode] = useState<"upcoming" | "monthly">("upcoming");
   const [month, setMonth] = useState(() => new Date());
   const [selected, setSelected] = useState<Match | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<GenericSportEvent | null>(null);
   const [day, setDay] = useState<string | null>(null);
   const [competition, setCompetition] = useState(ALL);
   const [category, setCategory] = useState(ALL);
@@ -54,7 +57,16 @@ function CalendarPage() {
   const { data: matches = [], isLoading: loadingMatches } = useMatches();
   const { data: competitions = [] } = useCompetitions();
   const { data: genericEvents = [], isLoading: loadingEvents } = useEvents();
+  const { data: coverages = [] } = useCoverages();
   const isEventsLoading = loadingMatches || loadingEvents;
+
+  const coverageByMatchId = useMemo(() => {
+    const map = new Map<string, (typeof coverages)[number]>();
+    for (const c of coverages) {
+      if (c.match_id) map.set(c.match_id, c);
+    }
+    return map;
+  }, [coverages]);
 
   const categories = useMemo(
     () => Array.from(new Set(competitions.map((c) => c.category))).sort(),
@@ -79,8 +91,22 @@ function CalendarPage() {
         status = "in_progress";
       }
 
-      const homeName = m.home_team?.name ?? "Time da Casa";
-      const awayName = m.away_team?.name ?? "Time Visitante";
+      // Garante extração do nome real do clube mesmo com tipagem variada
+      const homeName =
+        typeof m.home_team === "string" && m.home_team.trim()
+          ? m.home_team.trim()
+          : typeof (m.home_team as unknown as { name?: string })?.name === "string"
+            ? (m.home_team as unknown as { name: string }).name.trim()
+            : "Time da Casa";
+
+      const awayName =
+        typeof m.away_team === "string" && m.away_team.trim()
+          ? m.away_team.trim()
+          : typeof (m.away_team as unknown as { name?: string })?.name === "string"
+            ? (m.away_team as unknown as { name: string }).name.trim()
+            : "Time Visitante";
+
+      const coverage = coverageByMatchId.get(m.id);
 
       list.push({
         id: m.id,
@@ -92,9 +118,15 @@ function CalendarPage() {
         status,
         homeTeam: homeName,
         awayTeam: awayName,
+        homeTeamId: m.home_team_id ?? null,
+        awayTeamId: m.away_team_id ?? null,
         competition: m.competition?.name ?? null,
+        competitionColor: m.competition?.color ?? null,
         city: m.city ?? null,
         state: m.state ?? null,
+        notes: m.notes ?? null,
+        credentialStatus: coverage?.credential_status ?? "not_requested",
+        isMatch: true,
         createdAt: m.created_at,
       });
     }
@@ -103,6 +135,8 @@ function CalendarPage() {
     for (const e of genericEvents) {
       let status: SportEventStatus = "scheduled";
       if (e.status === "completed") status = "completed";
+      else if (e.status === "cancelled") status = "cancelled";
+      else if (e.status === "postponed") status = "postponed";
       else if (e.start_date === todayStr) status = "in_progress";
 
       list.push({
@@ -117,12 +151,13 @@ function CalendarPage() {
         city: e.city ?? null,
         state: e.state ?? null,
         notes: e.notes ?? null,
+        isMatch: false,
         createdAt: e.created_at,
       });
     }
 
     return list;
-  }, [matches, genericEvents]);
+  }, [matches, genericEvents, coverageByMatchId]);
 
   const filtered = useMemo(() => {
     const now = new Date();
@@ -155,6 +190,13 @@ function CalendarPage() {
     const match = matches.find((m) => m.id === event.id);
     if (match) {
       setSelected(match);
+      setSelectedEvent(null);
+      return;
+    }
+    const genericEvent = genericEvents.find((e) => e.id === event.id);
+    if (genericEvent) {
+      setSelectedEvent(genericEvent);
+      setSelected(null);
     }
   };
 
@@ -297,6 +339,10 @@ function CalendarPage() {
       )}
 
       <MatchDetailDialog match={selected} onOpenChange={(open) => !open && setSelected(null)} />
+      <EventDetailSheet
+        event={selectedEvent}
+        onOpenChange={(open) => !open && setSelectedEvent(null)}
+      />
     </div>
   );
 }

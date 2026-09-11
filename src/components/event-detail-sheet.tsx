@@ -1,7 +1,19 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarCheck, CalendarPlus, Download, ExternalLink, Pencil, Trash2 } from "lucide-react";
+import {
+  Calendar,
+  CalendarCheck,
+  CalendarPlus,
+  CheckCircle2,
+  Download,
+  ExternalLink,
+  Pencil,
+  RotateCcw,
+  Send,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { EventCommercialPanel } from "@/components/event-commercial-panel";
@@ -30,7 +42,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CREDENTIAL_LABEL, CREDENTIAL_STATUSES } from "@/lib/coverages";
 import {
@@ -42,6 +54,13 @@ import {
 } from "@/lib/events";
 import { useEventEngagements } from "@/lib/event-engagements";
 import { formatSportLabel } from "@/lib/sports";
+import { CoverageReminderToggle } from "@/components/coverage-reminder-toggle";
+import {
+  CoverageStatusBadge,
+  toCoverageStatus,
+  toCredentialStatus,
+} from "@/components/coverage-status-badge";
+import { CoverageNotesEditor } from "@/components/coverage-notes-editor";
 import {
   agendaSportEventToExport,
   exportAgendaSportEventToIcs,
@@ -65,13 +84,23 @@ export function EventDetailSheet({
   onOpenChange: (open: boolean) => void;
 }) {
   const { data: coverages = [] } = useEventCoverages();
-  const { upsert, complete, reopen, remove: removeCoverage } = useEventCoverageMutations();
+  const {
+    request,
+    upsert,
+    complete,
+    reopen,
+    remove: removeCoverage,
+    setStatus,
+    setNotes,
+  } = useEventCoverageMutations();
   const { remove } = useEventMutations();
   const { data: engagements = [] } = useEventEngagements(event?.id);
   const [editing, setEditing] = useState(false);
   const [confirm, setConfirm] = useState(false);
 
   const coverage = event ? coverageByEvent(coverages)[event.id] : undefined;
+  const isApproved = coverage?.credential_status === "approved";
+  const isCompleted = !!coverage?.completed_at;
 
   return (
     <>
@@ -80,9 +109,20 @@ export function EventDetailSheet({
           {event && (
             <>
               <SheetHeader className="gap-2">
-                <span className="w-fit rounded-md bg-surface px-2 py-0.5 text-xs font-medium">
-                  {formatSportLabel(event.sport)}
-                </span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="w-fit rounded-md bg-surface px-2 py-0.5 text-xs font-medium">
+                    {formatSportLabel(event.sport)}
+                  </span>
+                  {coverage && (
+                    <CoverageStatusBadge
+                      status={toCoverageStatus(coverage.credential_status)}
+                      onChange={(newStatus) =>
+                        setStatus.mutate({ id: coverage.id, status: toCredentialStatus(newStatus) })
+                      }
+                      size="default"
+                    />
+                  )}
+                </div>
                 <SheetTitle className="text-xl leading-snug">{event.name}</SheetTitle>
               </SheetHeader>
 
@@ -114,7 +154,10 @@ export function EventDetailSheet({
                             .join(" — ") || "A definir"
                         }
                       />
-                      <Row label="Modalidade" value={formatSportLabel(event.sport) ?? "—"} />
+                      <Row
+                        label="Esporte / Modalidade"
+                        value={formatSportLabel(event.sport) ?? "—"}
+                      />
                       <Row label="Local" value={event.venue || "A definir"} />
                       <Row
                         label="Cidade"
@@ -140,44 +183,104 @@ export function EventDetailSheet({
                       </Button>
                     )}
 
-                    <section className="space-y-3 rounded-xl border border-border p-4">
-                      <p className="text-sm font-medium">Cobertura</p>
+                    <section className="space-y-3.5 rounded-xl border border-border p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold">Cobertura & Agenda</p>
+                        {isApproved && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                            <CheckCircle2 className="size-3.5" /> Na Minha Agenda
+                          </span>
+                        )}
+                        {isCompleted && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
+                            Cobertura concluída
+                          </span>
+                        )}
+                      </div>
 
                       {event.accreditation_required ? (
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                           <p className="text-xs text-muted-foreground">
                             Este evento exige credenciamento. A cobertura entra na Minha Agenda
-                            quando o credenciamento for aprovado.
+                            automaticamente quando o credenciamento for aprovado.
                           </p>
-                          <Select
-                            value={coverage?.credential_status ?? "not_requested"}
-                            onValueChange={(v) =>
-                              upsert.mutate(
-                                { eventId: event.id, status: v as never },
-                                {
-                                  onSuccess: () => toast.success("Credenciamento atualizado."),
-                                  onError: () => toast.error("Não foi possível atualizar."),
-                                },
-                              )
-                            }
-                          >
-                            <SelectTrigger className="w-full sm:w-[220px]">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {CREDENTIAL_STATUSES.map((s) => (
-                                <SelectItem key={s} value={s}>
-                                  {CREDENTIAL_LABEL[s]}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            {(!coverage ||
+                              coverage.credential_status === "not_requested" ||
+                              coverage.credential_status === "denied") && (
+                              <Button
+                                size="sm"
+                                disabled={request.isPending}
+                                onClick={() =>
+                                  request.mutate(event.id, {
+                                    onSuccess: () => toast.success("Credenciamento solicitado."),
+                                    onError: () =>
+                                      toast.error("Não foi possível solicitar credenciamento."),
+                                  })
+                                }
+                              >
+                                <Send className="size-4" /> Solicitar credenciamento
+                              </Button>
+                            )}
+
+                            {coverage?.credential_status === "requested" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-emerald-500 text-emerald-600 hover:bg-emerald-500/10"
+                                disabled={upsert.isPending}
+                                onClick={() =>
+                                  upsert.mutate(
+                                    { eventId: event.id, status: "approved" },
+                                    {
+                                      onSuccess: () =>
+                                        toast.success(
+                                          "Credenciamento aprovado e adicionado à Minha Agenda.",
+                                        ),
+                                      onError: () =>
+                                        toast.error("Não foi possível aprovar credenciamento."),
+                                    },
+                                  )
+                                }
+                              >
+                                <CheckCircle2 className="size-4" /> Aprovar credenciamento
+                              </Button>
+                            )}
+
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground">Status:</span>
+                              <Select
+                                value={coverage?.credential_status ?? "not_requested"}
+                                onValueChange={(v) =>
+                                  upsert.mutate(
+                                    { eventId: event.id, status: v as never },
+                                    {
+                                      onSuccess: () => toast.success("Credenciamento atualizado."),
+                                      onError: () => toast.error("Não foi possível atualizar."),
+                                    },
+                                  )
+                                }
+                              >
+                                <SelectTrigger className="w-[180px]">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {CREDENTIAL_STATUSES.map((s) => (
+                                    <SelectItem key={s} value={s}>
+                                      {CREDENTIAL_LABEL[s]}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
                         </div>
                       ) : coverage ? (
                         <p className="text-xs text-muted-foreground">
-                          {coverage.completed_at
+                          {isCompleted
                             ? "Cobertura concluída."
-                            : "Este evento está na sua agenda."}
+                            : "Este evento está confirmado na sua agenda."}
                         </p>
                       ) : (
                         <Button
@@ -188,7 +291,7 @@ export function EventDetailSheet({
                               { eventId: event.id, status: "approved" },
                               {
                                 onSuccess: () => toast.success("Evento adicionado à Minha Agenda."),
-                                onError: () => toast.error("Não foi possível adicionar."),
+                                onError: () => toast.error("Não foi possível adicionar à agenda."),
                               },
                             )
                           }
@@ -197,37 +300,74 @@ export function EventDetailSheet({
                         </Button>
                       )}
 
-                      {coverage && (
-                        <div className="flex flex-wrap gap-2">
-                          {coverage.completed_at ? (
+                      {/* Ações quando já está na agenda */}
+                      {isApproved && coverage && (
+                        <>
+                          <CoverageReminderToggle
+                            coverageId={coverage.id}
+                            variant="row"
+                            className="mt-2"
+                          />
+
+                          <CoverageNotesEditor
+                            coverageId={coverage.id}
+                            initialNotes={coverage.notes}
+                            onSave={async (newNotes) => {
+                              await setNotes.mutateAsync({ id: coverage.id, notes: newNotes });
+                            }}
+                            variant="sheet"
+                            className="mt-3"
+                          />
+
+                          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+                            <Link to="/agenda" onClick={() => onOpenChange(false)}>
+                              <Button size="sm" variant="outline">
+                                <Calendar className="size-4" /> Ver na Minha Agenda
+                              </Button>
+                            </Link>
+
+                            {!isCompleted ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={complete.isPending}
+                                onClick={() =>
+                                  complete.mutate(coverage.id, {
+                                    onSuccess: () => toast.success("Cobertura concluída."),
+                                    onError: () =>
+                                      toast.error("Não foi possível concluir a cobertura."),
+                                  })
+                                }
+                              >
+                                <CheckCircle2 className="size-4" /> Concluir cobertura
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={reopen.isPending}
+                                onClick={() =>
+                                  reopen.mutate(coverage.id, {
+                                    onSuccess: () => toast.success("Cobertura reaberta."),
+                                    onError: () =>
+                                      toast.error("Não foi possível reabrir a cobertura."),
+                                  })
+                                }
+                              >
+                                <RotateCcw className="size-4" /> Reabrir cobertura
+                              </Button>
+                            )}
+
                             <Button
                               size="sm"
-                              variant="outline"
-                              onClick={() => reopen.mutate(coverage.id)}
+                              variant="ghost"
+                              className="text-muted-foreground hover:text-destructive"
+                              onClick={() => removeCoverage.mutate(coverage.id)}
                             >
-                              Reabrir cobertura
+                              Remover da agenda
                             </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                complete.mutate(coverage.id, {
-                                  onSuccess: () => toast.success("Cobertura concluída."),
-                                })
-                              }
-                            >
-                              Marcar cobertura como concluída
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => removeCoverage.mutate(coverage.id)}
-                          >
-                            Remover da agenda
-                          </Button>
-                        </div>
+                          </div>
+                        </>
                       )}
                     </section>
 
@@ -247,7 +387,13 @@ export function EventDetailSheet({
                         <DropdownMenuContent align="start" className="w-56">
                           <DropdownMenuItem
                             id="event-download-ics"
-                            onClick={() => exportAgendaSportEventToIcs(event)}
+                            onClick={() =>
+                              exportAgendaSportEventToIcs(
+                                event,
+                                coverage?.notes,
+                                toCoverageStatus(coverage?.credential_status),
+                              )
+                            }
                             className="cursor-pointer gap-2 text-xs"
                           >
                             <Download className="size-4 text-primary" />
@@ -290,6 +436,12 @@ export function EventDetailSheet({
                   </TabsContent>
                 </Tabs>
               </div>
+
+              <SheetFooter className="mt-4 flex flex-row items-center justify-end border-t border-border pt-4">
+                <Button type="button" variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+                  Fechar
+                </Button>
+              </SheetFooter>
             </>
           )}
         </SheetContent>

@@ -10,7 +10,19 @@ import {
   startOfDay,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarDays, Clock, Filter, Heart, MapPin, Sparkles, Trophy } from "lucide-react";
+import {
+  Bike,
+  CalendarDays,
+  CheckCircle2,
+  Clock,
+  Filter,
+  Footprints,
+  Heart,
+  MapPin,
+  Sparkles,
+  Trophy,
+  Waves,
+} from "lucide-react";
 
 import { EventSearchInput, type SearchScope } from "@/components/event-search-input";
 import { EventStatusBadge } from "@/components/event-status-badge";
@@ -21,12 +33,66 @@ import {
 } from "@/components/sports-empty-states";
 import { SportsEventDetailsDialog } from "@/components/sports-event-details-dialog";
 import { SportsCalendarSkeleton } from "@/components/sports-event-skeletons";
+import { TeamCrest } from "@/components/team-crest";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEventFavorites } from "@/lib/favorites";
 import { cn } from "@/lib/utils";
 import type { ISportEvent, SportEvent, SportEventStatus } from "@/schemas/sport-event";
+
+/**
+ * Visual temático para eventos esportivos que não possuem confrontos diretos
+ * (ex: corridas de rua, torneios de tênis, ciclismo, natação).
+ * Exibe imagem se existir com fallback seguro que nunca esconde o nome.
+ */
+function SportVisualBadge({
+  sport,
+  imageUrl,
+  title,
+}: {
+  sport: string;
+  imageUrl?: string | null;
+  title: string;
+}) {
+  const [broken, setBroken] = useState(false);
+  const normalized = (sport || "").toLowerCase();
+
+  let Icon = Trophy;
+  if (normalized.includes("corrida") || normalized.includes("atletismo")) {
+    Icon = Footprints;
+  } else if (normalized.includes("ciclismo") || normalized.includes("bike")) {
+    Icon = Bike;
+  } else if (
+    normalized.includes("natacao") ||
+    normalized.includes("surf") ||
+    normalized.includes("remo")
+  ) {
+    Icon = Waves;
+  }
+
+  if (imageUrl && !broken) {
+    return (
+      <span className="inline-flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-surface">
+        <img
+          src={imageUrl}
+          alt={title}
+          onError={() => setBroken(true)}
+          className="size-full object-cover"
+        />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      title={sport}
+      className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-surface font-semibold text-muted-foreground"
+    >
+      <Icon className="size-4 opacity-70" />
+    </span>
+  );
+}
 
 export interface SportsEventCalendarProps {
   events: (SportEvent | ISportEvent)[];
@@ -67,29 +133,41 @@ export function SportsEventCalendar({
 
   const today = useMemo(() => startOfDay(new Date()), []);
 
-  // Mapeamento de datas com eventos e eventos futuros
-  const { eventDates, upcomingDates, eventsByDate } = useMemo(() => {
-    const dates: Date[] = [];
-    const upcoming: Date[] = [];
+  // Mapeamento de datas com eventos e eventos futuros (dias distintos)
+  const { eventDates, distinctUpcomingDates, upcomingEventsCount, eventsByDate } = useMemo(() => {
+    const datesMap = new Map<string, Date>();
+    const upcomingMap = new Map<string, Date>();
     const byDate = new Map<string, (SportEvent | ISportEvent)[]>();
+    let totalUpcomingEvents = 0;
 
     for (const ev of events) {
       if (!ev.date) continue;
       const parsedDate = parseISO(ev.date);
       if (isNaN(parsedDate.getTime())) continue;
 
-      dates.push(parsedDate);
-      if (isToday(parsedDate) || isAfter(parsedDate, today)) {
-        upcoming.push(parsedDate);
+      const dateKey = ev.date;
+      if (!datesMap.has(dateKey)) {
+        datesMap.set(dateKey, parsedDate);
       }
 
-      const key = ev.date;
-      const existing = byDate.get(key) ?? [];
+      if (isToday(parsedDate) || isAfter(parsedDate, today)) {
+        totalUpcomingEvents += 1;
+        if (!upcomingMap.has(dateKey)) {
+          upcomingMap.set(dateKey, parsedDate);
+        }
+      }
+
+      const existing = byDate.get(dateKey) ?? [];
       existing.push(ev);
-      byDate.set(key, existing);
+      byDate.set(dateKey, existing);
     }
 
-    return { eventDates: dates, upcomingDates: upcoming, eventsByDate: byDate };
+    return {
+      eventDates: Array.from(datesMap.values()),
+      distinctUpcomingDates: Array.from(upcomingMap.values()),
+      upcomingEventsCount: totalUpcomingEvents,
+      eventsByDate: byDate,
+    };
   }, [events, today]);
 
   // Filtragem dos eventos de acordo com a busca, status, favoritos e modo de data
@@ -180,8 +258,8 @@ export function SportsEventCalendar({
     return eventsByDate.get(dateKey) ?? [];
   }, [selectedDate, eventsByDate]);
 
-  // Contadores para métricas do topo
-  const upcomingCount = upcomingDates.length;
+  // Contadores para métricas do topo (dias distintos e eventos)
+  const upcomingDaysCount = distinctUpcomingDates.length;
   const inProgressCount = events.filter((e) => e.status === "in_progress").length;
 
   const handleSelectDay = (day: Date | undefined) => {
@@ -192,9 +270,12 @@ export function SportsEventCalendar({
   };
 
   const handleOpenEventModal = (event: SportEvent | ISportEvent) => {
+    if (onEventSelect) {
+      onEventSelect(event);
+      return;
+    }
     setSelectedDetailEvent(event);
     setDetailsOpen(true);
-    onEventSelect?.(event);
   };
 
   if (isLoading) {
@@ -343,9 +424,13 @@ export function SportsEventCalendar({
               <CardTitle className="text-base font-semibold flex items-center gap-2">
                 <CalendarDays className="size-4 text-primary" /> Calendário Esportivo
               </CardTitle>
-              {upcomingCount > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                  {upcomingCount} {upcomingCount === 1 ? "data futura" : "datas futuras"}
+              {upcomingDaysCount > 0 && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
+                  title={`${upcomingEventsCount} ${upcomingEventsCount === 1 ? "evento agendado" : "eventos agendados"} em ${upcomingDaysCount} ${upcomingDaysCount === 1 ? "data distinta" : "datas distintas"}`}
+                >
+                  {upcomingDaysCount} {upcomingDaysCount === 1 ? "data futura" : "datas futuras"} ·{" "}
+                  {upcomingEventsCount} {upcomingEventsCount === 1 ? "evento" : "eventos"}
                 </span>
               )}
             </div>
@@ -362,7 +447,7 @@ export function SportsEventCalendar({
               locale={ptBR}
               modifiers={{
                 hasEvents: eventDates,
-                hasUpcoming: upcomingDates,
+                hasUpcoming: distinctUpcomingDates,
               }}
               modifiersClassNames={{
                 hasEvents:
@@ -487,28 +572,68 @@ export function SportsEventCalendar({
                           )}
                         </div>
 
-                        {/* Título ou Confronto de Times */}
-                        <h4 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
-                          {event.homeTeam && event.awayTeam ? (
-                            <span>
-                              {event.homeTeam}{" "}
-                              <span className="text-muted-foreground font-normal">×</span>{" "}
-                              {event.awayTeam}
-                            </span>
-                          ) : (
-                            event.title
-                          )}
-                        </h4>
+                        {/* Título ou Confronto de Times com Escudos */}
+                        {event.homeTeam && event.awayTeam ? (
+                          <div className="flex items-center gap-2.5">
+                            <TeamCrest name={event.homeTeam} teamId={event.homeTeamId} size="md" />
+                            <div className="min-w-0 flex-1">
+                              <h4 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                                {event.homeTeam}{" "}
+                                <span className="text-muted-foreground font-normal">×</span>{" "}
+                                {event.awayTeam}
+                              </h4>
+                            </div>
+                            <TeamCrest name={event.awayTeam} teamId={event.awayTeamId} size="md" />
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2.5">
+                            <SportVisualBadge
+                              sport={event.sportType}
+                              imageUrl={event.imageUrl}
+                              title={event.title}
+                            />
+                            <h4 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors min-w-0 flex-1 truncate">
+                              {event.title}
+                            </h4>
+                          </div>
+                        )}
                       </div>
 
-                      {/* Status Badge Reutilizável + Botão de Favorito com Coração */}
-                      <div className="flex items-center gap-1.5">
+                      {/* Status Esportivo e Cobertura do Fotógrafo + Botão de Favorito */}
+                      <div className="flex flex-wrap items-center justify-end gap-1.5">
+                        {/* Status da partida na tabela */}
                         <EventStatusBadge
                           status={event.status as SportEventStatus}
+                          label={
+                            event.status === "scheduled"
+                              ? event.isMatch
+                                ? "Partida agendada"
+                                : "Evento agendado"
+                              : undefined
+                          }
                           size="md"
                           showIcon={true}
                           id={`badge-${event.id}`}
+                          title="Status na tabela esportiva oficial"
                         />
+
+                        {/* Indicador de Cobertura do Fotógrafo (se aprovado ou solicitado) */}
+                        {event.credentialStatus === "approved" && (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 whitespace-nowrap"
+                            title="Presença/cobertura confirmada na Minha Agenda"
+                          >
+                            <CheckCircle2 className="size-3" /> Na Minha Agenda
+                          </span>
+                        )}
+                        {event.credentialStatus === "requested" && (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400 whitespace-nowrap"
+                            title="Solicitação de credenciamento enviada"
+                          >
+                            <Clock className="size-3" /> Solicitação enviada
+                          </span>
+                        )}
 
                         {/* Botão de Favorito no Card */}
                         <button

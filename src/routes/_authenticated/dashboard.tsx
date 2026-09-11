@@ -6,6 +6,7 @@ import { CalendarClock, ClipboardList, MapPin, Newspaper, Users, Wallet } from "
 
 import { AccessBanner } from "@/components/access-status";
 import { DashboardAdminSection } from "@/components/dashboard-admin-section";
+import { DashboardCoverageChart } from "@/components/dashboard-coverage-chart";
 import { NewsReaderSheet } from "@/components/news-reader-sheet";
 import { FirstStepsHint, OnboardingCard } from "@/components/onboarding-checklist";
 import { QuickCreate } from "@/components/quick-create";
@@ -470,6 +471,9 @@ function Dashboard() {
           </div>
         </div>
       </section>
+
+      {/* Gráfico mensal de eventos cobertos */}
+      <DashboardCoverageChart />
 
       {/* 7. Informação */}
       {recentNews.length > 0 && (

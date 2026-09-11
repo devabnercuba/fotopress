@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { mapConcurrent } from "./async-pool";
 
 import { cacheTeamLogo } from "./logos.functions";
 import { uploadAsset } from "./storage";
@@ -244,10 +245,50 @@ export async function ensureTeams(
   const bySlug = new Map<string, Team>();
   let created = 0;
 
+  type PendingPatch = {
+    id: string;
+    patch: { state?: string; logo_url?: string; abbreviation?: string };
+    team: Team;
+    key: string;
+  };
+  const pendingPatches: PendingPatch[] = [];
+
+  type PendingLegacy = {
+    id: string;
+    patch: {
+      sport_key: string;
+      category: string | null;
+      gender: string | null;
+      slug: string;
+      normalized_name: string;
+    };
+    legacy: Team;
+    key: string;
+    nameKey: string;
+  };
+  const pendingLegacy: PendingLegacy[] = [];
+
+  type PendingInsert = {
+    key: string;
+    row: {
+      name: string;
+      short_name: string;
+      abbreviation: string;
+      slug: string;
+      normalized_name: string;
+      state: string | null;
+      logo_url: string | null;
+      sport_key: string;
+      category: string | null;
+      gender: string | null;
+    };
+  };
+  const toInsert: PendingInsert[] = [];
+
   for (const [key, entry] of unique) {
     const sportKey = entry.sportKey || DEFAULT_SPORT_KEY;
     const nameKey = identityToken(normalizeTeamName(entry.name));
-    let found = byIdentity.get(key);
+    const found = byIdentity.get(key);
 
     // Cadastro anterior sem modalidade/categoria: adota e completa o contexto,
     // em vez de criar um clone.
@@ -257,17 +298,20 @@ export async function ensureTeams(
         legacy &&
         identityToken(legacy.sport_key || DEFAULT_SPORT_KEY) === identityToken(sportKey)
       ) {
-        const patch = {
-          sport_key: sportKey,
-          category: entry.category ?? null,
-          gender: entry.gender ?? null,
-          slug: legacy.slug || teamSlug(entry.name),
-          normalized_name: legacy.normalized_name || normalizeTeamName(entry.name),
-        };
-        await supabase.from("teams").update(patch).eq("id", legacy.id);
-        found = Object.assign(legacy, patch) as Team;
-        legacyByName.delete(nameKey);
-        byIdentity.set(teamRowIdentityKey(found), found);
+        pendingLegacy.push({
+          id: legacy.id,
+          patch: {
+            sport_key: sportKey,
+            category: entry.category ?? null,
+            gender: entry.gender ?? null,
+            slug: legacy.slug || teamSlug(entry.name),
+            normalized_name: legacy.normalized_name || normalizeTeamName(entry.name),
+          },
+          legacy,
+          key,
+          nameKey,
+        });
+        continue;
       }
     }
 
@@ -279,17 +323,17 @@ export async function ensureTeams(
       if (!found.logo_url && !found.logo_local && entry.logoUrl) patch.logo_url = entry.logoUrl;
       if (!found.abbreviation) patch.abbreviation = teamAbbreviation(entry.name);
       if (Object.keys(patch).length > 0) {
-        await supabase.from("teams").update(patch).eq("id", found.id);
-        Object.assign(found, patch);
+        pendingPatches.push({ id: found.id, patch, team: found, key });
+      } else {
+        byIdentity.set(key, found);
+        if (!bySlug.has(found.slug)) bySlug.set(found.slug, found);
       }
-      byIdentity.set(key, found);
-      if (!bySlug.has(found.slug)) bySlug.set(found.slug, found);
       continue;
     }
 
-    const { data, error: insertError } = await supabase
-      .from("teams")
-      .insert({
+    toInsert.push({
+      key,
+      row: {
         name: entry.name,
         short_name: entry.name,
         abbreviation: teamAbbreviation(entry.name),
@@ -300,14 +344,72 @@ export async function ensureTeams(
         sport_key: sportKey,
         category: entry.category ?? null,
         gender: entry.gender ?? null,
-      })
-      .select(TEAM_SELECT)
-      .single();
-    if (insertError) throw insertError;
-    const team = data as unknown as Team;
-    byIdentity.set(key, team);
-    if (!bySlug.has(team.slug)) bySlug.set(team.slug, team);
-    created += 1;
+      },
+    });
+  }
+
+  // 1. Processa legacy em concorrência limitada (ex: 5 por vez)
+  if (pendingLegacy.length > 0) {
+    await mapConcurrent(pendingLegacy, 5, async (item) => {
+      await supabase.from("teams").update(item.patch).eq("id", item.id);
+      const updated = Object.assign(item.legacy, item.patch) as Team;
+      legacyByName.delete(item.nameKey);
+      byIdentity.set(teamRowIdentityKey(updated), updated);
+      byIdentity.set(item.key, updated);
+      if (!bySlug.has(updated.slug)) bySlug.set(updated.slug, updated);
+    });
+  }
+
+  // 2. Processa patches de times existentes em concorrência limitada (ex: 5 por vez)
+  if (pendingPatches.length > 0) {
+    await mapConcurrent(pendingPatches, 5, async (item) => {
+      await supabase.from("teams").update(item.patch).eq("id", item.id);
+      Object.assign(item.team, item.patch);
+      byIdentity.set(item.key, item.team);
+      if (!bySlug.has(item.team.slug)) bySlug.set(item.team.slug, item.team);
+    });
+  }
+
+  // 3. Inserção em lote para novos times — reduz dezenas de roundtrips para 1
+  if (toInsert.length > 0) {
+    const { data: inserted, error: batchError } = await supabase
+      .from("teams")
+      .insert(toInsert.map((t) => t.row))
+      .select(TEAM_SELECT);
+
+    if (!batchError && inserted) {
+      const insertedRows = inserted as unknown as Team[];
+      for (const team of insertedRows) {
+        const idKey = teamRowIdentityKey(team);
+        byIdentity.set(idKey, team);
+        if (!bySlug.has(team.slug)) bySlug.set(team.slug, team);
+      }
+      for (const item of toInsert) {
+        const team =
+          byIdentity.get(item.key) ??
+          insertedRows.find((r) => r.slug === item.row.slug && r.name === item.row.name);
+        if (team) {
+          byIdentity.set(item.key, team);
+          if (!bySlug.has(team.slug)) bySlug.set(team.slug, team);
+        }
+      }
+      created += insertedRows.length;
+    } else {
+      // Fallback seguro individual se o lote sofrer restrição pontual
+      for (const item of toInsert) {
+        const { data, error: singleError } = await supabase
+          .from("teams")
+          .insert(item.row)
+          .select(TEAM_SELECT)
+          .single();
+        if (!singleError && data) {
+          const team = data as unknown as Team;
+          byIdentity.set(item.key, team);
+          if (!bySlug.has(team.slug)) bySlug.set(team.slug, team);
+          created += 1;
+        }
+      }
+    }
   }
 
   return { byIdentity, bySlug, created };
@@ -317,21 +419,60 @@ export async function ensureTeams(
  * Guarda no armazenamento do projeto os escudos publicados pelas origens
  * (FCF/CBF). Melhor esforço: se a origem bloquear o download, o clube segue
  * usando a URL remota. Escudo manual existente nunca é sobrescrito.
+ * Executado em concorrência limitada (4) e com timeout para nunca bloquear a importação.
  */
-export async function cacheTeamLogos(teams: Team[]) {
+export async function cacheTeamLogos(
+  teams: Team[],
+  options?: {
+    concurrency?: number;
+    timeoutMs?: number;
+    onProgress?: (current: number, total: number) => void;
+  },
+) {
   const pending = teams.filter((t) => t.logo_url && !t.logo_local);
-  let cached = 0;
+  if (pending.length === 0) return 0;
+
+  // Deduplica por URL e slug para evitar downloads repetidos
+  const uniqueByUrl = new Map<string, Team>();
   for (const team of pending) {
-    try {
-      const result = await cacheTeamLogo({ data: { url: team.logo_url!, slug: team.slug } });
-      if (!result.ok || !result.url) continue;
-      await supabase.from("teams").update({ logo_local: result.url }).eq("id", team.id);
-      team.logo_local = result.url;
-      cached += 1;
-    } catch {
-      // segue com a URL remota
+    const key = `${team.logo_url}|${team.slug}`;
+    if (!uniqueByUrl.has(key)) {
+      uniqueByUrl.set(key, team);
     }
   }
+
+  const items = [...uniqueByUrl.values()];
+  const limit = options?.concurrency ?? 4;
+  const timeoutMs = options?.timeoutMs ?? 6000;
+  let cached = 0;
+  let processed = 0;
+
+  await mapConcurrent(items, limit, async (team) => {
+    try {
+      const timeoutPromise = new Promise<{ ok: false; reason: string }>((resolve) =>
+        setTimeout(() => resolve({ ok: false, reason: "timeout" }), timeoutMs),
+      );
+      const fetchPromise = cacheTeamLogo({ data: { url: team.logo_url!, slug: team.slug } });
+      const result = await Promise.race([fetchPromise, timeoutPromise]);
+
+      if (result.ok && result.url) {
+        await supabase.from("teams").update({ logo_local: result.url }).eq("id", team.id);
+        team.logo_local = result.url;
+        for (const other of pending) {
+          if (other.logo_url === team.logo_url && other.slug === team.slug) {
+            other.logo_local = result.url;
+          }
+        }
+        cached += 1;
+      }
+    } catch {
+      // segue com a URL remota em melhor esforço
+    } finally {
+      processed++;
+      options?.onProgress?.(processed, items.length);
+    }
+  });
+
   return cached;
 }
 

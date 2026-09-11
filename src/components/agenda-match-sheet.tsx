@@ -13,10 +13,20 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MatchClientsPanel } from "@/components/match-clients-panel";
 import { RadarPanel } from "@/components/radar-panel";
+import { TeamCrest } from "@/components/team-crest";
 
 import { compStyle } from "@/lib/competitions";
 import { exportMatchToIcs, getGoogleCalendarUrl, matchToSportEvent } from "@/lib/calendar-export";
-import type { Coverage } from "@/lib/coverages";
+import { isRadarEnabled } from "@/lib/features";
+import { CoverageReminderToggle } from "@/components/coverage-reminder-toggle";
+import {
+  CoverageStatusBadge,
+  toCoverageStatus,
+  toCredentialStatus,
+  type SimpleCoverageStatus,
+} from "@/components/coverage-status-badge";
+import { CoverageNotesEditor } from "@/components/coverage-notes-editor";
+import { useCoverageMutations, type Coverage } from "@/lib/coverages";
 import type { Radar } from "@/lib/radar";
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -39,6 +49,20 @@ export function AgendaMatchSheet({
 }) {
   const match = coverage?.match ?? null;
   const style = compStyle(match?.competition?.color);
+  const showRadar = isRadarEnabled();
+  const { setStatus, setNotes } = useCoverageMutations();
+
+  const handleStatusChange = (newStatus: SimpleCoverageStatus) => {
+    if (!coverage) return;
+    setStatus.mutate({ id: coverage.id, status: toCredentialStatus(newStatus) });
+  };
+
+  const handleSaveNotes = async (newNotes: string | null) => {
+    if (!coverage) return;
+    await setNotes.mutateAsync({ id: coverage.id, notes: newNotes });
+  };
+
+  const currentStatus = toCoverageStatus(coverage?.credential_status);
 
   return (
     <Sheet open={!!match} onOpenChange={onOpenChange}>
@@ -46,11 +70,22 @@ export function AgendaMatchSheet({
         {match && coverage && (
           <>
             <SheetHeader className="gap-3">
-              <span className={`w-fit rounded-md px-2 py-0.5 text-xs font-medium ${style.chip}`}>
-                {match.competition?.name ?? "Sem campeonato"}
-              </span>
-              <SheetTitle className="text-xl leading-snug">
-                {match.home_team} <span className="text-muted-foreground">×</span> {match.away_team}
+              <div className="flex items-center justify-between gap-2">
+                <span className={`w-fit rounded-md px-2 py-0.5 text-xs font-medium ${style.chip}`}>
+                  {match.competition?.name ?? "Sem campeonato"}
+                </span>
+                <CoverageStatusBadge
+                  status={currentStatus}
+                  onChange={handleStatusChange}
+                  size="default"
+                />
+              </div>
+              <SheetTitle className="flex items-center gap-2 text-xl leading-snug">
+                <TeamCrest name={match.home_team} teamId={match.home_team_id} size="sm" />
+                <span>{match.home_team}</span>
+                <span className="text-muted-foreground font-normal">×</span>
+                <span>{match.away_team}</span>
+                <TeamCrest name={match.away_team} teamId={match.away_team_id} size="sm" />
               </SheetTitle>
             </SheetHeader>
 
@@ -59,24 +94,37 @@ export function AgendaMatchSheet({
                 <TabsList>
                   <TabsTrigger value="detalhes">Detalhes</TabsTrigger>
                   <TabsTrigger value="clientes">Clientes</TabsTrigger>
-                  <TabsTrigger value="radar">Radar</TabsTrigger>
+                  {showRadar && <TabsTrigger value="radar">Radar</TabsTrigger>}
                 </TabsList>
 
-                <TabsContent value="detalhes" className="mt-4">
-                  <Row
-                    label="Data"
-                    value={format(parseISO(match.date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-                  />
-                  <Row label="Hora" value={match.time.slice(0, 5)} />
-                  <Row label="Mandante" value={match.home_team} />
-                  <Row label="Visitante" value={match.away_team} />
-                  <Row label="Estádio" value={match.venue || "A definir"} />
-                  <Row
-                    label="Cidade"
-                    value={[match.city, match.state].filter(Boolean).join(" · ") || "A definir"}
+                <TabsContent value="detalhes" className="mt-4 space-y-4">
+                  <div>
+                    <Row
+                      label="Data"
+                      value={format(parseISO(match.date), "dd 'de' MMMM 'de' yyyy", {
+                        locale: ptBR,
+                      })}
+                    />
+                    <Row label="Hora" value={match.time.slice(0, 5)} />
+                    <Row label="Mandante" value={match.home_team} />
+                    <Row label="Visitante" value={match.away_team} />
+                    <Row label="Estádio" value={match.venue || "A definir"} />
+                    <Row
+                      label="Cidade"
+                      value={[match.city, match.state].filter(Boolean).join(" · ") || "A definir"}
+                    />
+                  </div>
+
+                  <CoverageReminderToggle coverageId={coverage.id} variant="row" />
+
+                  <CoverageNotesEditor
+                    coverageId={coverage.id}
+                    initialNotes={coverage.notes}
+                    onSave={handleSaveNotes}
+                    variant="sheet"
                   />
 
-                  <div className="mt-5 pt-3 border-t border-border flex flex-wrap gap-2">
+                  <div className="pt-2 border-t border-border flex flex-wrap gap-2">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
@@ -92,7 +140,7 @@ export function AgendaMatchSheet({
                       <DropdownMenuContent align="end" className="w-56">
                         <DropdownMenuItem
                           id="agenda-match-download-ics"
-                          onClick={() => exportMatchToIcs(match)}
+                          onClick={() => exportMatchToIcs(match, coverage.notes, currentStatus)}
                           className="cursor-pointer gap-2 text-xs"
                         >
                           <Download className="size-4 text-primary" />
@@ -127,9 +175,11 @@ export function AgendaMatchSheet({
                   <MatchClientsPanel match={match} />
                 </TabsContent>
 
-                <TabsContent value="radar" className="mt-5">
-                  <RadarPanel coverage={coverage} radar={radar} />
-                </TabsContent>
+                {showRadar && (
+                  <TabsContent value="radar" className="mt-5">
+                    <RadarPanel coverage={coverage} radar={radar} />
+                  </TabsContent>
+                )}
               </Tabs>
             </div>
           </>

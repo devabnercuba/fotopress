@@ -16,14 +16,25 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
   const data = event.notification.data || {};
-  const targetUrl = data.url || "/?openUpdates=true";
+  const targetUrl = data.url || "/agenda";
   const targetTab = data.tab || "updates";
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
-      // Se houver uma aba aberta, foca nela e envia a mensagem para abrir o modal de novidades
+      // Se houver uma aba aberta, foca nela e navega ou abre novidades
       for (const client of windowClients) {
         if ("focus" in client) {
+          if (data.type === "COVERAGE_REMINDER" || targetUrl.includes("/agenda")) {
+            client.postMessage({
+              type: "NAVIGATE_TO",
+              url: targetUrl,
+            });
+            if ("navigate" in client && !client.url.includes("/agenda")) {
+              client.navigate(targetUrl);
+            }
+            return client.focus();
+          }
+
           client.postMessage({
             type: "OPEN_UPDATES_PANEL",
             tab: targetTab,
@@ -33,7 +44,7 @@ self.addEventListener("notificationclick", (event) => {
         }
       }
 
-      // Se o aplicativo estiver fechado, abre uma nova janela navegando com o parâmetro de novidades
+      // Se o aplicativo estiver fechado, abre uma nova janela navegando com a URL de destino
       if (self.clients.openWindow) {
         return self.clients.openWindow(targetUrl);
       }
@@ -91,5 +102,26 @@ self.addEventListener("message", (event) => {
         data,
       });
     }, delay);
+  }
+
+  if (event.data.type === "SCHEDULE_COVERAGE_REMINDER") {
+    const delay = event.data.delay || 0;
+    const title = event.data.title || "FotoPress: Lembrete de Cobertura";
+    const body = event.data.body || "Sua cobertura agendada está próxima do início.";
+    const data = event.data.data || { url: "/agenda", type: "COVERAGE_REMINDER" };
+
+    setTimeout(
+      () => {
+        self.registration.showNotification(title, {
+          body,
+          icon: "/favicon.png",
+          badge: "/favicon.png",
+          tag: event.data.tag || "fotopress-coverage-reminder",
+          renotify: true,
+          data,
+        });
+      },
+      Math.max(0, delay),
+    );
   }
 });

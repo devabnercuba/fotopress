@@ -172,6 +172,7 @@ export type EventCoverage = {
   id: string;
   event_id: string;
   credential_status: "not_requested" | "requested" | "approved" | "denied";
+  reminder_enabled?: boolean | null;
   notes: string | null;
   completed_at: string | null;
   event: SportEvent | null;
@@ -181,12 +182,25 @@ export function useEventCoverages() {
   return useQuery({
     queryKey: ["event-coverages"],
     queryFn: async (): Promise<EventCoverage[]> => {
-      const { data, error } = await supabase
+      let data: Record<string, unknown>[] | null = null;
+      const resWithReminder = await supabase
         .from("event_coverages")
         .select(
-          `id, event_id, credential_status, notes, completed_at, event:events(${SELECT}, deleted_at)`,
+          `id, event_id, credential_status, reminder_enabled, notes, completed_at, event:events(${SELECT}, deleted_at)`,
         );
-      if (error) throw error;
+
+      if (resWithReminder.error) {
+        const fallbackRes = await supabase
+          .from("event_coverages")
+          .select(
+            `id, event_id, credential_status, notes, completed_at, event:events(${SELECT}, deleted_at)`,
+          );
+        if (fallbackRes.error) throw fallbackRes.error;
+        data = fallbackRes.data;
+      } else {
+        data = resWithReminder.data;
+      }
+
       // Eventos com soft delete não podem aparecer em nenhuma lista operacional.
       const items = (
         (data ?? []) as unknown as (EventCoverage & {
@@ -210,7 +224,30 @@ export function coverageByEvent(coverages: EventCoverage[]) {
 
 export function useEventCoverageMutations() {
   const qc = useQueryClient();
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["event-coverages"] });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["event-coverages"] });
+    qc.invalidateQueries({ queryKey: ["events"] });
+    qc.invalidateQueries({ queryKey: ["coverages"] });
+    qc.invalidateQueries({ queryKey: ["matches"] });
+  };
+
+  /** Solicitar credenciamento para evento esportivo */
+  const request = useMutation({
+    mutationFn: async (eventId: string) => {
+      const uid = await currentUserId();
+      const { error } = await supabase.from("event_coverages").upsert(
+        {
+          user_id: uid,
+          event_id: eventId,
+          credential_status: "requested",
+          completed_at: null,
+        },
+        { onConflict: "user_id,event_id" },
+      );
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
 
   const upsert = useMutation({
     mutationFn: async ({
@@ -259,8 +296,141 @@ export function useEventCoverageMutations() {
       const { error } = await supabase.from("event_coverages").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: invalidate,
+    onMutate: async (id: string) => {
+      await qc.cancelQueries({ queryKey: ["event-coverages"] });
+      const previous = qc.getQueryData<EventCoverage[]>(["event-coverages"]);
+      qc.setQueryData<EventCoverage[]>(["event-coverages"], (old) =>
+        old ? old.filter((c) => c.id !== id) : [],
+      );
+      return { previous };
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previous) {
+        qc.setQueryData(["event-coverages"], context.previous);
+      }
+    },
+    onSettled: invalidate,
   });
 
-  return { upsert, complete, reopen, remove };
+  const removeByEvent = useMutation({
+    mutationFn: async (eventId: string) => {
+      const uid = await currentUserId();
+      const { error } = await supabase
+        .from("event_coverages")
+        .delete()
+        .eq("user_id", uid)
+        .eq("event_id", eventId);
+      if (error) throw error;
+    },
+    onMutate: async (eventId: string) => {
+      await qc.cancelQueries({ queryKey: ["event-coverages"] });
+      const previous = qc.getQueryData<EventCoverage[]>(["event-coverages"]);
+      qc.setQueryData<EventCoverage[]>(["event-coverages"], (old) =>
+        old ? old.filter((c) => c.event_id !== eventId) : [],
+      );
+      return { previous };
+    },
+    onError: (_err, _eventId, context) => {
+      if (context?.previous) {
+        qc.setQueryData(["event-coverages"], context.previous);
+      }
+    },
+    onSettled: invalidate,
+  });
+
+  /** Alterna ou define se o lembrete push do evento está ativo (reminder_enabled) */
+  const setReminderEnabled = useMutation({
+    mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
+      try {
+        const { error } = await supabase
+          .from("event_coverages")
+          .update({ reminder_enabled: enabled })
+          .eq("id", id);
+        if (error) {
+          console.warn("Aviso ao salvar reminder_enabled na tabela event_coverages:", error);
+        }
+      } catch (err) {
+        console.warn("Erro ao atualizar reminder_enabled no Supabase:", err);
+      }
+    },
+    onMutate: async ({ id, enabled }) => {
+      await qc.cancelQueries({ queryKey: ["event-coverages"] });
+      const previous = qc.getQueryData<EventCoverage[]>(["event-coverages"]);
+      qc.setQueryData<EventCoverage[]>(["event-coverages"], (old) =>
+        old ? old.map((c) => (c.id === id ? { ...c, reminder_enabled: enabled } : c)) : [],
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        qc.setQueryData(["event-coverages"], context.previous);
+      }
+    },
+    onSettled: invalidate,
+  });
+
+  /** Atualiza status de credenciamento/cobertura do evento com atualização otimista */
+  const setStatus = useMutation({
+    mutationFn: async ({
+      id,
+      status,
+    }: {
+      id: string;
+      status: EventCoverage["credential_status"];
+    }) => {
+      const { error } = await supabase
+        .from("event_coverages")
+        .update({ credential_status: status })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onMutate: async ({ id, status }) => {
+      await qc.cancelQueries({ queryKey: ["event-coverages"] });
+      const previous = qc.getQueryData<EventCoverage[]>(["event-coverages"]);
+      qc.setQueryData<EventCoverage[]>(["event-coverages"], (old) =>
+        old ? old.map((c) => (c.id === id ? { ...c, credential_status: status } : c)) : [],
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        qc.setQueryData(["event-coverages"], context.previous);
+      }
+    },
+    onSettled: invalidate,
+  });
+
+  /** Salva notas livres ou lembretes da cobertura do evento */
+  const setNotes = useMutation({
+    mutationFn: async ({ id, notes }: { id: string; notes: string | null }) => {
+      const { error } = await supabase.from("event_coverages").update({ notes }).eq("id", id);
+      if (error) throw error;
+    },
+    onMutate: async ({ id, notes }) => {
+      await qc.cancelQueries({ queryKey: ["event-coverages"] });
+      const previous = qc.getQueryData<EventCoverage[]>(["event-coverages"]);
+      qc.setQueryData<EventCoverage[]>(["event-coverages"], (old) =>
+        old ? old.map((c) => (c.id === id ? { ...c, notes } : c)) : [],
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        qc.setQueryData(["event-coverages"], context.previous);
+      }
+    },
+    onSettled: invalidate,
+  });
+
+  return {
+    request,
+    upsert,
+    complete,
+    reopen,
+    remove,
+    removeByEvent,
+    setReminderEnabled,
+    setStatus,
+    setNotes,
+  };
 }
