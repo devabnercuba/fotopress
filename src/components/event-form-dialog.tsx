@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Plus, X } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -23,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SportSelect } from "@/components/sport-select";
+import { supabase } from "@/integrations/supabase/client";
 import { EVENT_STATUS, useEventMutations, type EventStatus, type SportEvent } from "@/lib/events";
 import { cn } from "@/lib/utils";
 
@@ -38,7 +40,7 @@ const EMPTY = {
   state: "",
   organizer: "",
   official_url: "",
-  accreditation_required: false,
+  accreditation_required: true,
   notes: "",
   status: "scheduled" as EventStatus,
 };
@@ -55,13 +57,20 @@ export function EventFormDialog({
   event?: SportEvent | null;
   sports?: (string | null | undefined)[];
 }) {
+  const qc = useQueryClient();
   const { save } = useEventMutations();
   const [form, setForm] = useState(EMPTY);
   const [categories, setCategories] = useState<string[]>([]);
   const [newCategory, setNewCategory] = useState("");
+  const [pendingEventId, setPendingEventId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setPendingEventId(null);
+      setIsSaving(false);
+      return;
+    }
     if (event) {
       setForm({
         name: event.name,
@@ -75,7 +84,7 @@ export function EventFormDialog({
         state: event.state ?? "",
         organizer: event.organizer ?? "",
         official_url: event.official_url ?? "",
-        accreditation_required: event.accreditation_required,
+        accreditation_required: event.accreditation_required ?? true,
         notes: event.notes ?? "",
         status: event.status,
       });
@@ -85,10 +94,13 @@ export function EventFormDialog({
       setCategories([]);
     }
     setNewCategory("");
+    setPendingEventId(null);
   }, [open, event]);
 
-  const set = <K extends keyof typeof EMPTY>(key: K, value: (typeof EMPTY)[K]) =>
+  const set = <K extends keyof typeof EMPTY>(key: K, value: (typeof EMPTY)[K]) => {
+    setPendingEventId(null);
     setForm((f) => ({ ...f, [key]: value }));
+  };
 
   function addCategory() {
     const name = newCategory.trim();
@@ -99,7 +111,9 @@ export function EventFormDialog({
     setNewCategory("");
   }
 
-  function submit() {
+  async function submit() {
+    if (isSaving) return;
+
     if (form.name.trim().length < 2) {
       toast.error("Informe o nome do evento.");
       return;
@@ -112,33 +126,141 @@ export function EventFormDialog({
       toast.error("Informe a data inicial.");
       return;
     }
-    save.mutate(
-      {
-        ...(event ? { id: event.id } : {}),
-        name: form.name.trim(),
-        sport: form.sport,
-        start_date: form.start_date,
-        end_date: form.end_date || null,
-        start_time: form.start_time || null,
-        end_time: form.end_time || null,
-        venue: form.venue.trim() || null,
-        city: form.city.trim() || null,
-        state: form.state.trim().toUpperCase() || null,
-        organizer: form.organizer.trim() || null,
-        official_url: form.official_url.trim() || null,
-        accreditation_required: form.accreditation_required,
-        notes: form.notes.trim() || null,
-        status: form.status,
-        categories,
-      },
-      {
-        onSuccess: () => {
-          toast.success(event ? "Evento atualizado." : "Evento cadastrado.");
-          onOpenChange(false);
-        },
-        onError: () => toast.error("Não foi possível salvar o evento."),
-      },
-    );
+
+    setIsSaving(true);
+    try {
+      if (form.accreditation_required) {
+        // Fluxo padrão: exige credenciamento
+        let eventId = event?.id || pendingEventId;
+        if (!eventId) {
+          eventId = await save.mutateAsync({
+            name: form.name.trim(),
+            sport: form.sport,
+            start_date: form.start_date,
+            end_date: form.end_date || null,
+            start_time: form.start_time || null,
+            end_time: form.end_time || null,
+            venue: form.venue.trim() || null,
+            city: form.city.trim() || null,
+            state: form.state.trim().toUpperCase() || null,
+            organizer: form.organizer.trim() || null,
+            official_url: form.official_url.trim() || null,
+            accreditation_required: true,
+            notes: form.notes.trim() || null,
+            status: form.status,
+            categories,
+          });
+        } else if (event) {
+          await save.mutateAsync({
+            id: event.id,
+            name: form.name.trim(),
+            sport: form.sport,
+            start_date: form.start_date,
+            end_date: form.end_date || null,
+            start_time: form.start_time || null,
+            end_time: form.end_time || null,
+            venue: form.venue.trim() || null,
+            city: form.city.trim() || null,
+            state: form.state.trim().toUpperCase() || null,
+            organizer: form.organizer.trim() || null,
+            official_url: form.official_url.trim() || null,
+            accreditation_required: true,
+            notes: form.notes.trim() || null,
+            status: form.status,
+            categories,
+          });
+        }
+
+        qc.invalidateQueries({ queryKey: ["events"] });
+        qc.invalidateQueries({ queryKey: ["event-coverages"] });
+        qc.invalidateQueries({ queryKey: ["agenda"] });
+        toast.success(event ? "Evento atualizado." : "Evento cadastrado.");
+        setPendingEventId(null);
+        onOpenChange(false);
+      } else {
+        // Fluxo com credenciamento dispensado
+        let eventId = event?.id || pendingEventId;
+        if (!eventId) {
+          eventId = await save.mutateAsync({
+            name: form.name.trim(),
+            sport: form.sport,
+            start_date: form.start_date,
+            end_date: form.end_date || null,
+            start_time: form.start_time || null,
+            end_time: form.end_time || null,
+            venue: form.venue.trim() || null,
+            city: form.city.trim() || null,
+            state: form.state.trim().toUpperCase() || null,
+            organizer: form.organizer.trim() || null,
+            official_url: form.official_url.trim() || null,
+            accreditation_required: false,
+            notes: form.notes.trim() || null,
+            status: form.status,
+            categories,
+          });
+          setPendingEventId(eventId);
+        } else if (event) {
+          await save.mutateAsync({
+            id: event.id,
+            name: form.name.trim(),
+            sport: form.sport,
+            start_date: form.start_date,
+            end_date: form.end_date || null,
+            start_time: form.start_time || null,
+            end_time: form.end_time || null,
+            venue: form.venue.trim() || null,
+            city: form.city.trim() || null,
+            state: form.state.trim().toUpperCase() || null,
+            organizer: form.organizer.trim() || null,
+            official_url: form.official_url.trim() || null,
+            accreditation_required: false,
+            notes: form.notes.trim() || null,
+            status: form.status,
+            categories,
+          });
+        }
+
+        // Etapa 2: Vincular cobertura na agenda com credenciamento dispensado a realizar
+        const { data: authData } = await supabase.auth.getUser();
+        const uid = authData?.user?.id;
+        if (!uid) throw new Error("Usuário não autenticado");
+
+        const { error: covError } = await supabase.from("event_coverages").upsert(
+          {
+            user_id: uid,
+            event_id: eventId,
+            credential_status: "exempt",
+            completed_at: null,
+          },
+          { onConflict: "user_id,event_id" },
+        );
+
+        if (covError) {
+          console.error("Erro ao vincular cobertura dispensada de evento:", covError);
+          toast.error(
+            "O evento foi cadastrado, mas houve uma falha ao incluir na Minha Agenda. Clique em Salvar novamente para concluir a inclusão sem duplicar o evento.",
+          );
+          return;
+        }
+
+        // Sucesso completo confirmado
+        setPendingEventId(null);
+        qc.invalidateQueries({ queryKey: ["events"] });
+        qc.invalidateQueries({ queryKey: ["event-coverages"] });
+        qc.invalidateQueries({ queryKey: ["agenda"] });
+        toast.success(
+          event
+            ? "Evento atualizado e adicionado à Minha Agenda com credenciamento dispensado."
+            : "Evento cadastrado e adicionado à Minha Agenda com credenciamento dispensado.",
+        );
+        onOpenChange(false);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Não foi possível salvar o evento.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -329,17 +451,62 @@ export function EventFormDialog({
             <p className="text-xs text-muted-foreground">Categorias são opcionais.</p>
           </section>
 
-          <section className="space-y-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Credenciamento
-            </p>
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={form.accreditation_required}
-                onCheckedChange={(v) => set("accreditation_required", v === true)}
-              />
-              Credenciamento necessário?
-            </label>
+          <section className="space-y-3 rounded-lg border border-border/70 bg-card/60 p-3.5">
+            <div className="space-y-1">
+              <Label className="text-sm font-semibold flex items-center gap-1">
+                <span>Esta cobertura precisa de credenciamento?</span>
+                <span className="text-destructive">*</span>
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Defina se este evento exige credenciamento oficial ou se você possui acesso livre
+                para cobertura.
+              </p>
+            </div>
+
+            <RadioGroup
+              value={form.accreditation_required ? "sim" : "nao"}
+              onValueChange={(val) => {
+                setPendingEventId(null);
+                set("accreditation_required", val === "sim");
+              }}
+              className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1"
+            >
+              <label
+                htmlFor="event-accreditation-yes"
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-all",
+                  form.accreditation_required
+                    ? "border-primary bg-primary/5 text-foreground ring-1 ring-primary"
+                    : "border-border hover:bg-surface text-muted-foreground",
+                )}
+              >
+                <RadioGroupItem value="sim" id="event-accreditation-yes" className="mt-0.5" />
+                <div className="space-y-0.5">
+                  <div className="text-xs font-semibold text-foreground">Sim (Padrão)</div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Exige credenciamento. Você poderá solicitar e acompanhar a aprovação.
+                  </p>
+                </div>
+              </label>
+
+              <label
+                htmlFor="event-accreditation-no"
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-all",
+                  !form.accreditation_required
+                    ? "border-sky-500 bg-sky-500/5 text-foreground ring-1 ring-sky-500"
+                    : "border-border hover:bg-surface text-muted-foreground",
+                )}
+              >
+                <RadioGroupItem value="nao" id="event-accreditation-no" className="mt-0.5" />
+                <div className="space-y-0.5">
+                  <div className="text-xs font-semibold text-foreground">Não (Dispensado)</div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Credenciamento dispensado. Adiciona direto à Minha Agenda a realizar.
+                  </p>
+                </div>
+              </label>
+            </RadioGroup>
           </section>
 
           <section className="space-y-3">
@@ -356,11 +523,11 @@ export function EventFormDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={isSaving}>
             Cancelar
           </Button>
-          <Button onClick={submit} disabled={save.isPending}>
-            {save.isPending ? "Salvando…" : event ? "Salvar alterações" : "Cadastrar evento"}
+          <Button onClick={submit} disabled={isSaving}>
+            {isSaving ? "Salvando…" : event ? "Salvar alterações" : "Cadastrar evento"}
           </Button>
         </DialogFooter>
       </DialogContent>

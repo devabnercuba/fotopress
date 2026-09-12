@@ -193,19 +193,28 @@ function AgendaPage() {
     let confirmed = 0;
     let pending = 0;
     let cancelled = 0;
+    let exempt = 0;
     for (const c of activeCoverages) {
       const s = toCoverageStatus(c.credential_status);
       if (s === "confirmed") confirmed++;
       else if (s === "pending") pending++;
       else if (s === "cancelled") cancelled++;
+      else if (s === "exempt") exempt++;
     }
     for (const c of activeEventCoverages) {
       const s = toCoverageStatus(c.credential_status);
       if (s === "confirmed") confirmed++;
       else if (s === "pending") pending++;
       else if (s === "cancelled") cancelled++;
+      else if (s === "exempt") exempt++;
     }
-    return { confirmed, pending, cancelled, total: confirmed + pending + cancelled };
+    return {
+      confirmed,
+      pending,
+      cancelled,
+      exempt,
+      total: confirmed + pending + cancelled + exempt,
+    };
   }, [activeCoverages, activeEventCoverages]);
 
   const competitionOptions = useMemo(() => {
@@ -318,6 +327,12 @@ function AgendaPage() {
               <span className="size-1.5 rounded-full bg-amber-500" />
               {statusCounts.pending} pendentes
             </span>
+            {statusCounts.exempt > 0 && (
+              <span className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-400 font-medium">
+                <span className="size-1.5 rounded-full bg-sky-500" />
+                {statusCounts.exempt} dispensados
+              </span>
+            )}
             {statusCounts.cancelled > 0 && (
               <span className="inline-flex items-center gap-1 text-rose-700 dark:text-rose-400 font-medium">
                 <span className="size-1.5 rounded-full bg-rose-500" />
@@ -533,6 +548,12 @@ function AgendaPage() {
                     <span className="flex items-center gap-1.5">
                       <span className="size-2 rounded-full bg-rose-500" />
                       <span>Cancelados ({statusCounts.cancelled})</span>
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="exempt" className="text-xs">
+                    <span className="flex items-center gap-1.5">
+                      <span className="size-2 rounded-full bg-sky-500" />
+                      <span>Dispensados ({statusCounts.exempt})</span>
                     </span>
                   </SelectItem>
                 </SelectContent>

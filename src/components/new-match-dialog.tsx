@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -14,11 +14,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchableCompetitionSelect } from "@/components/searchable-competition-select";
 import { supabase } from "@/integrations/supabase/client";
 import { participantLabels } from "@/lib/sport-form-config";
 import { useSportPreferences } from "@/lib/sport-preferences";
 import { useSportTerminology } from "@/lib/sport-terminology";
+import { cn } from "@/lib/utils";
 
 const EMPTY = {
   competition_id: "",
@@ -53,50 +55,135 @@ export function NewMatchDialog({
   const setOpen = (v: boolean) => {
     setInternalOpen(v);
     onOpenChange?.(v);
+    if (!v) {
+      setPendingMatchId(null);
+      setIsSubmitting(false);
+    }
   };
 
   const [form, setForm] = useState(EMPTY);
+  const [needsAccreditation, setNeedsAccreditation] = useState(true);
+  const [pendingMatchId, setPendingMatchId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const set = (patch: Partial<typeof EMPTY>) => setForm((f) => ({ ...f, ...patch }));
+  const set = (patch: Partial<typeof EMPTY>) => {
+    setPendingMatchId(null);
+    setForm((f) => ({ ...f, ...patch }));
+  };
 
-  const create = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("matches").insert({
-        competition_id: form.competition_id,
-        date: form.date,
-        time: form.time,
-        home_team: form.home_team.trim(),
-        away_team: form.away_team.trim(),
-        venue: form.venue.trim(),
-        city: form.city.trim(),
-        state: form.state.trim(),
-        source: "Cadastro Manual",
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["matches"] });
-      toast.success(
-        isFutebol ? "Jogo cadastrado." : `${terminology.coverageSingular} cadastrado(a).`,
-      );
-      setForm(EMPTY);
-      setOpen(false);
-    },
-    onError: () =>
-      toast.error(
-        isFutebol
-          ? "Não foi possível cadastrar o jogo."
-          : `Não foi possível cadastrar ${terminology.coverageSingular.toLowerCase()}.`,
-      ),
-  });
+  async function submit() {
+    if (isSubmitting) return;
 
-  function submit() {
     const missing = Object.entries(form).find(([, v]) => !String(v).trim());
     if (missing) {
       toast.error("Preencha todos os campos.");
       return;
     }
-    create.mutate();
+
+    setIsSubmitting(true);
+    try {
+      if (needsAccreditation) {
+        // Fluxo padrão com credenciamento necessário
+        let matchId = pendingMatchId;
+        if (!matchId) {
+          const { data, error } = await supabase
+            .from("matches")
+            .insert({
+              competition_id: form.competition_id || null,
+              date: form.date,
+              time: form.time,
+              home_team: form.home_team.trim(),
+              away_team: form.away_team.trim(),
+              venue: form.venue.trim() || null,
+              city: form.city.trim() || null,
+              state: form.state.trim().toUpperCase() || null,
+              source: "Cadastro Manual",
+            })
+            .select("id")
+            .single();
+
+          if (error) throw error;
+          matchId = data.id;
+        }
+
+        qc.invalidateQueries({ queryKey: ["matches"] });
+        qc.invalidateQueries({ queryKey: ["coverages"] });
+        qc.invalidateQueries({ queryKey: ["agenda"] });
+        toast.success(
+          isFutebol ? "Jogo cadastrado." : `${terminology.coverageSingular} cadastrado(a).`,
+        );
+        setForm(EMPTY);
+        setPendingMatchId(null);
+        setNeedsAccreditation(true);
+        setOpen(false);
+      } else {
+        // Fluxo com credenciamento dispensado
+        let matchId = pendingMatchId;
+        if (!matchId) {
+          const { data, error } = await supabase
+            .from("matches")
+            .insert({
+              competition_id: form.competition_id || null,
+              date: form.date,
+              time: form.time,
+              home_team: form.home_team.trim(),
+              away_team: form.away_team.trim(),
+              venue: form.venue.trim() || null,
+              city: form.city.trim() || null,
+              state: form.state.trim().toUpperCase() || null,
+              source: "Cadastro Manual",
+            })
+            .select("id")
+            .single();
+
+          if (error) throw error;
+          matchId = data.id;
+          setPendingMatchId(matchId);
+        }
+
+        // Etapa 2: Vincular cobertura ao usuário com credenciamento dispensado a realizar
+        const { data: authData } = await supabase.auth.getUser();
+        const uid = authData?.user?.id;
+        const { error: coverageError } = await supabase.from("coverages").upsert(
+          {
+            match_id: matchId,
+            ...(uid ? { user_id: uid } : {}),
+            credential_status: "exempt",
+            completed_at: null,
+          },
+          { onConflict: "match_id" },
+        );
+
+        if (coverageError) {
+          console.error("Erro ao vincular cobertura dispensada:", coverageError);
+          toast.error(
+            "A partida foi cadastrada, mas houve uma falha ao incluir na Minha Agenda. Clique em Salvar novamente para concluir a inclusão sem duplicar a partida.",
+          );
+          return;
+        }
+
+        // Sucesso completo confirmado
+        setPendingMatchId(null);
+        qc.invalidateQueries({ queryKey: ["matches"] });
+        qc.invalidateQueries({ queryKey: ["coverages"] });
+        qc.invalidateQueries({ queryKey: ["agenda"] });
+        toast.success(
+          "Partida cadastrada e adicionada à Minha Agenda com credenciamento dispensado.",
+        );
+        setForm(EMPTY);
+        setNeedsAccreditation(true);
+        setOpen(false);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(
+        isFutebol
+          ? "Não foi possível cadastrar o jogo."
+          : `Não foi possível cadastrar ${terminology.coverageSingular.toLowerCase()}.`,
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   const triggerLabel = isFutebol ? "Nova partida" : `Nova partida`;
@@ -104,9 +191,11 @@ export function NewMatchDialog({
   const dialogDescription = isFutebol
     ? "Cadastre uma partida manualmente, sem depender de importação."
     : `Cadastre ${terminology.coverageSingular.toLowerCase()} manualmente, sem depender de importação.`;
-  const submitLabel = isFutebol
-    ? "Salvar jogo"
-    : `Salvar ${terminology.coverageSingular.toLowerCase()}`;
+  const submitLabel = isSubmitting
+    ? "Salvando..."
+    : isFutebol
+      ? "Salvar jogo"
+      : `Salvar ${terminology.coverageSingular.toLowerCase()}`;
 
   return (
     <>
@@ -117,7 +206,7 @@ export function NewMatchDialog({
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{dialogTitle}</DialogTitle>
             <DialogDescription>{dialogDescription}</DialogDescription>
@@ -205,13 +294,73 @@ export function NewMatchDialog({
                 />
               </div>
             </div>
+
+            {/* Pergunta obrigatória de credenciamento */}
+            <div className="space-y-3 rounded-lg border border-border/70 bg-card/60 p-3.5">
+              <div className="space-y-1">
+                <Label className="text-sm font-semibold flex items-center gap-1">
+                  <span>Esta cobertura precisa de credenciamento?</span>
+                  <span className="text-destructive">*</span>
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {isFutebol
+                    ? "Defina se esta partida exige credenciamento oficial ou se você possui acesso livre para cobertura."
+                    : "Defina se esta cobertura exige credenciamento oficial ou se você possui acesso livre."}
+                </p>
+              </div>
+
+              <RadioGroup
+                value={needsAccreditation ? "sim" : "nao"}
+                onValueChange={(val) => {
+                  setNeedsAccreditation(val === "sim");
+                  setPendingMatchId(null);
+                }}
+                className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1"
+              >
+                <label
+                  htmlFor="match-accreditation-yes"
+                  className={cn(
+                    "flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-all",
+                    needsAccreditation
+                      ? "border-primary bg-primary/5 text-foreground ring-1 ring-primary"
+                      : "border-border hover:bg-surface text-muted-foreground",
+                  )}
+                >
+                  <RadioGroupItem value="sim" id="match-accreditation-yes" className="mt-0.5" />
+                  <div className="space-y-0.5">
+                    <div className="text-xs font-semibold text-foreground">Sim (Padrão)</div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Exige credenciamento. Você poderá solicitar e acompanhar a aprovação.
+                    </p>
+                  </div>
+                </label>
+
+                <label
+                  htmlFor="match-accreditation-no"
+                  className={cn(
+                    "flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-all",
+                    !needsAccreditation
+                      ? "border-sky-500 bg-sky-500/5 text-foreground ring-1 ring-sky-500"
+                      : "border-border hover:bg-surface text-muted-foreground",
+                  )}
+                >
+                  <RadioGroupItem value="nao" id="match-accreditation-no" className="mt-0.5" />
+                  <div className="space-y-0.5">
+                    <div className="text-xs font-semibold text-foreground">Não (Dispensado)</div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Credenciamento dispensado. Adiciona direto à Minha Agenda a realizar.
+                    </p>
+                  </div>
+                </label>
+              </RadioGroup>
+            </div>
           </div>
 
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setOpen(false)}>
+            <Button variant="ghost" onClick={() => setOpen(false)} disabled={isSubmitting}>
               Cancelar
             </Button>
-            <Button onClick={submit} disabled={create.isPending}>
+            <Button onClick={submit} disabled={isSubmitting}>
               {submitLabel}
             </Button>
           </DialogFooter>

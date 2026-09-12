@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { CredentialStatus } from "@/lib/coverages";
 
-export type SimpleCoverageStatus = "confirmed" | "pending" | "cancelled";
+export type SimpleCoverageStatus = "confirmed" | "exempt" | "pending" | "cancelled";
 
 export const COVERAGE_STATUS_CONFIG: Record<
   SimpleCoverageStatus,
@@ -26,6 +26,14 @@ export const COVERAGE_STATUS_CONFIG: Record<
     badgeClass:
       "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25",
     dotClass: "bg-emerald-500",
+    icon: CheckCircle2,
+  },
+  exempt: {
+    label: "Credenciamento dispensado",
+    description: "Cobertura com credenciamento dispensado",
+    badgeClass:
+      "bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/30 hover:bg-sky-500/25",
+    dotClass: "bg-sky-500",
     icon: CheckCircle2,
   },
   pending: {
@@ -47,7 +55,7 @@ export const COVERAGE_STATUS_CONFIG: Record<
 };
 
 /**
- * Converte status do banco de dados (credential_status ou status) para o enum simples ('confirmed' | 'pending' | 'cancelled')
+ * Converte status do banco de dados (credential_status ou status) para o enum simples ('confirmed' | 'exempt' | 'pending' | 'cancelled')
  */
 export function toCoverageStatus(
   credentialStatus?: string | null,
@@ -55,6 +63,9 @@ export function toCoverageStatus(
 ): SimpleCoverageStatus {
   if (rawStatus === "cancelled" || credentialStatus === "denied") {
     return "cancelled";
+  }
+  if (credentialStatus === "exempt" || rawStatus === "exempt") {
+    return "exempt";
   }
   if (rawStatus === "confirmed" || credentialStatus === "approved") {
     return "confirmed";
@@ -69,6 +80,8 @@ export function toCredentialStatus(status: SimpleCoverageStatus): CredentialStat
   switch (status) {
     case "confirmed":
       return "approved";
+    case "exempt":
+      return "exempt";
     case "cancelled":
       return "denied";
     case "pending":

@@ -99,7 +99,8 @@ export function EventDetailSheet({
   const [confirm, setConfirm] = useState(false);
 
   const coverage = event ? coverageByEvent(coverages)[event.id] : undefined;
-  const isApproved = coverage?.credential_status === "approved";
+  const isApproved =
+    coverage?.credential_status === "approved" || coverage?.credential_status === "exempt";
   const isCompleted = !!coverage?.completed_at;
 
   return (
@@ -280,7 +281,7 @@ export function EventDetailSheet({
                         <p className="text-xs text-muted-foreground">
                           {isCompleted
                             ? "Cobertura concluída."
-                            : "Este evento está confirmado na sua agenda."}
+                            : "Credenciamento dispensado. Este evento está confirmado na sua agenda."}
                         </p>
                       ) : (
                         <Button
@@ -288,9 +289,12 @@ export function EventDetailSheet({
                           disabled={upsert.isPending}
                           onClick={() =>
                             upsert.mutate(
-                              { eventId: event.id, status: "approved" },
+                              { eventId: event.id, status: "exempt" },
                               {
-                                onSuccess: () => toast.success("Evento adicionado à Minha Agenda."),
+                                onSuccess: () =>
+                                  toast.success(
+                                    "Evento adicionado à Minha Agenda com credenciamento dispensado.",
+                                  ),
                                 onError: () => toast.error("Não foi possível adicionar à agenda."),
                               },
                             )

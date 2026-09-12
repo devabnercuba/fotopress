@@ -3,13 +3,14 @@ import { supabase } from "@/integrations/supabase/client";
 
 import type { Match } from "./queries";
 
-export type CredentialStatus = "not_requested" | "requested" | "approved" | "denied";
+export type CredentialStatus = "not_requested" | "requested" | "approved" | "denied" | "exempt";
 
 export const CREDENTIAL_STATUSES: CredentialStatus[] = [
   "not_requested",
   "requested",
   "approved",
   "denied",
+  "exempt",
 ];
 
 export const CREDENTIAL_LABEL: Record<CredentialStatus, string> = {
@@ -17,6 +18,7 @@ export const CREDENTIAL_LABEL: Record<CredentialStatus, string> = {
   requested: "Solicitado",
   approved: "Aprovado",
   denied: "Negado",
+  exempt: "Credenciamento dispensado",
 };
 
 export const CREDENTIAL_DOT: Record<CredentialStatus, string> = {
@@ -24,6 +26,7 @@ export const CREDENTIAL_DOT: Record<CredentialStatus, string> = {
   requested: "bg-comp-yellow",
   approved: "bg-comp-green",
   denied: "bg-destructive",
+  exempt: "bg-sky-500",
 };
 
 export type Coverage = {

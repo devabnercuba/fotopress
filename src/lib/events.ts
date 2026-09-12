@@ -171,7 +171,7 @@ export function useEventMutations() {
 export type EventCoverage = {
   id: string;
   event_id: string;
-  credential_status: "not_requested" | "requested" | "approved" | "denied";
+  credential_status: "not_requested" | "requested" | "approved" | "denied" | "exempt";
   reminder_enabled?: boolean | null;
   notes: string | null;
   completed_at: string | null;
@@ -240,6 +240,23 @@ export function useEventCoverageMutations() {
           user_id: uid,
           event_id: eventId,
           credential_status: "requested",
+          completed_at: null,
+        },
+        { onConflict: "user_id,event_id" },
+      );
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+
+  const createExempt = useMutation({
+    mutationFn: async (eventId: string) => {
+      const uid = await currentUserId();
+      const { error } = await supabase.from("event_coverages").upsert(
+        {
+          user_id: uid,
+          event_id: eventId,
+          credential_status: "exempt",
           completed_at: null,
         },
         { onConflict: "user_id,event_id" },
@@ -424,6 +441,7 @@ export function useEventCoverageMutations() {
 
   return {
     request,
+    createExempt,
     upsert,
     complete,
     reopen,
